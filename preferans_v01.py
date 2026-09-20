@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.62
+# Преферанс — версия 0.63
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -2412,7 +2412,11 @@ def estimate_contract_probability(
 
     return probability, average_tricks
 
-def choose_bot_bid(player, available_bids):
+def choose_bot_bid(
+    player,
+    available_bids,
+    history
+):
 
     # --------------------------------------------------------
     # Доцент видит только собственную руку.
@@ -2511,7 +2515,8 @@ def choose_bot_bid(player, available_bids):
 def bot_ai_worker(
     player,
     hand,
-    available_bids
+    available_bids,
+    history
 ):
 
     global bot_result
@@ -2525,7 +2530,8 @@ def bot_ai_worker(
 
     result = choose_bot_bid(
         player,
-        available_bids
+        available_bids,
+        history
     )
 
     bot_result = result
@@ -2645,8 +2651,8 @@ def bot_make_bid(player):
     # --------------------------------------------------------
 
     hand = player_hands[player].copy()
-
     available_bids = available_bids.copy()
+    history = bid_history.copy()
 
     # --------------------------------------------------------
     # Сбрасываем старый результат.
@@ -2666,7 +2672,8 @@ def bot_make_bid(player):
         args=(
             player,
             hand,
-            available_bids
+            available_bids,
+            history
         ),
         daemon=True
     )
