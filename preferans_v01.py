@@ -134,6 +134,9 @@ BID_OPTIONS = [
 player_bids = ["", "", ""]
 player_passed = [False, False, False]
 
+# История всех заявок в текущей торговле
+bid_history = []
+
 # Текущая заявка
 highest_bid = ""
 
@@ -157,6 +160,7 @@ def start_bidding():
     global opponent_actions
     global tricks_won
     global player_passed
+    global bid_history
 
     dealer = random.randint(0, 2)
 
@@ -169,6 +173,7 @@ def start_bidding():
     player_bids = ["", "", ""]
     player_passed = [False, False, False]
     highest_bid = ""
+    bid_history = []
 
     opponent_actions = ["", ""]
 
@@ -1579,6 +1584,174 @@ def get_available_bids(player):
 
     return available
 
+def get_card_rank_value(rank):
+
+    rank_values = {
+        "7": 0,
+        "8": 1,
+        "9": 2,
+        "10": 3,
+        "В": 4,
+        "Д": 5,
+        "К": 6,
+        "Т": 7
+    }
+
+    return rank_values[rank]
+
+
+def estimate_best_bid(hand):
+
+    # --------------------------------------------------------
+    # Считаем силу каждой масти.
+    # --------------------------------------------------------
+
+    suit_strength = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    suit_count = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    for rank, suit in hand:
+
+        suit_count[suit] += 1
+
+        rank_value = get_card_rank_value(rank)
+
+        # Старшие карты получают больший вес.
+        suit_strength[suit] += rank_value
+
+        if rank == "Т":
+            suit_strength[suit] += 4
+
+        elif rank == "К":
+            suit_strength[suit] += 2
+
+        elif rank == "Д":
+            suit_strength[suit] += 1
+
+    # --------------------------------------------------------
+    # Ищем лучшую масть.
+    # --------------------------------------------------------
+
+    best_suit = None
+    best_score = 0
+
+    for suit in suit_strength:
+
+        score = suit_strength[suit]
+
+        # Длина масти важна.
+        score += suit_count[suit] * 2
+
+        if score > best_score:
+
+            best_score = score
+            best_suit = suit
+
+    # --------------------------------------------------------
+    # Очень слабая рука.
+    # --------------------------------------------------------
+
+    if best_suit is None:
+
+        return None
+
+    if best_score < 18:
+
+        return None
+
+    # --------------------------------------------------------
+    # Примерная оценка уровня игры.
+    #
+    # Это пока НЕ окончательный ИИ.
+    # Мы только закладываем основу.
+    # --------------------------------------------------------
+
+    if best_score >= 32:
+
+        level = 8
+
+    elif best_score >= 27:
+
+        level = 7
+
+    else:
+
+        level = 6
+
+    return f"{level}{best_suit}"
+
+def choose_bot_bid(player, available_bids):
+
+    # --------------------------------------------------------
+    # Получаем только собственные карты бота.
+    #
+    # ВАЖНО:
+    # Здесь бот НЕ смотрит:
+    # player_hands[0]
+    # player_hands[2]
+    # talon
+    #
+    # Он знает только свою руку.
+    # --------------------------------------------------------
+
+    hand = player_hands[player]
+
+    # --------------------------------------------------------
+    # Если доступна только одна заявка — это Пас.
+    # --------------------------------------------------------
+
+    if len(available_bids) == 1:
+
+        return "Пас"
+
+    # --------------------------------------------------------
+    # Оцениваем руку.
+    # --------------------------------------------------------
+
+    best_bid = estimate_best_bid(hand)
+
+    # --------------------------------------------------------
+    # Если рука недостаточно хорошая —
+    # пасуем.
+    # --------------------------------------------------------
+
+    if best_bid is None:
+
+        return "Пас"
+
+    # --------------------------------------------------------
+    # Из разрешённых сейчас заявок выбираем
+    # самую высокую, но не выше оценки руки.
+    # --------------------------------------------------------
+
+    best_value = get_bid_value(best_bid)
+
+    candidates = []
+
+    for bid in available_bids:
+
+        if bid == "Пас":
+            continue
+
+        if get_bid_value(bid) <= best_value:
+
+            candidates.append(bid)
+
+    if not candidates:
+
+        return "Пас"
+
+    return candidates[-1]
 
 def bot_make_bid(player):
 
@@ -1588,35 +1761,36 @@ def bot_make_bid(player):
     global highest_bid
     global player_bids
     global opponent_actions
+    global bid_history
 
     available_bids = get_available_bids(player)
 
     # --------------------------------------------------------
-    # Пока простая логика бота:
-    # чаще пасуем, иногда выбираем допустимую заявку
+    # Пока выбираем решение через отдельную функцию ИИ
     # --------------------------------------------------------
 
-    if len(available_bids) > 1 and random.random() < 0.45:
+    bid = choose_bot_bid(
+        player,
+        available_bids
+    )
 
-        non_pass_bids = [
-            bid
-            for bid in available_bids
-            if bid != "Пас"
-        ]
-
-        if non_pass_bids:
-
-            bid = random.choice(non_pass_bids)
-
-        else:
-
-            bid = "Пас"
-
-    else:
-
-        bid = "Пас"
+    # --------------------------------------------------------
+    # Запоминаем последнюю заявку игрока
+    # --------------------------------------------------------
 
     player_bids[player] = bid
+
+    # --------------------------------------------------------
+    # Запоминаем всю историю торговли
+    # --------------------------------------------------------
+
+    bid_history.append(
+        (player, bid)
+    )
+
+    # --------------------------------------------------------
+    # Показываем заявку над картами соперника
+    # --------------------------------------------------------
 
     if player == 1:
 
@@ -1625,6 +1799,10 @@ def bot_make_bid(player):
     elif player == 2:
 
         opponent_actions[1] = bid
+
+    # --------------------------------------------------------
+    # Обновляем текущую заявку
+    # --------------------------------------------------------
 
     if bid != "Пас":
 
