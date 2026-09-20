@@ -1879,9 +1879,9 @@ def draw_bidding_window(surface, mouse_pos):
     # Настройки кнопок
     # ----------------------------------------------------
 
-    button_width = 105
     button_height = 46
     gap = 8
+    button_padding = 20
 
     # ----------------------------------------------------
     # Раскладываем заявки по строкам
@@ -1905,8 +1905,38 @@ def draw_bidding_window(surface, mouse_pos):
 
     for row_index, options in enumerate(rows):
 
+        button_widths = []
+
+        for bid in options:
+
+            text_width = 0
+
+            for char in bid:
+
+                if char in ("♠", "♣", "♦", "♥"):
+
+                    image = BID_SUIT_FONT.render(
+                        char,
+                        True,
+                        BLACK
+                    )
+
+                else:
+
+                    image = BID_TEXT_FONT.render(
+                        char,
+                        True,
+                        BLACK
+                    )
+
+                text_width += image.get_width()
+
+            button_widths.append(
+                text_width + button_padding * 2
+            )
+
         row_width = (
-            len(options) * button_width
+            sum(button_widths)
             + (len(options) - 1) * gap
         )
 
@@ -1920,11 +1950,14 @@ def draw_bidding_window(surface, mouse_pos):
             + row_index * (button_height + gap)
         )
 
+        current_x = start_x
+
         for index, bid in enumerate(options):
 
+            button_width = button_widths[index]
+
             rect = pygame.Rect(
-                start_x
-                + index * (button_width + gap),
+                current_x,
                 row_y,
                 button_width,
                 button_height
@@ -1935,13 +1968,16 @@ def draw_bidding_window(surface, mouse_pos):
             )
 
             if hovered:
+
                 pygame.draw.rect(
                     surface,
                     BID_BUTTON_HOVER,
                     rect,
                     border_radius=8
                 )
+
             else:
+
                 pygame.draw.rect(
                     surface,
                     BID_BUTTON,
@@ -1957,7 +1993,6 @@ def draw_bidding_window(surface, mouse_pos):
                 border_radius=8
             )
 
-
             suit_colors = {
                 "♠": BLACK,
                 "♣": BLACK,
@@ -1966,7 +2001,6 @@ def draw_bidding_window(surface, mouse_pos):
             }
 
             parts = []
-
             total_width = 0
 
             for char in bid:
@@ -1991,11 +2025,17 @@ def draw_bidding_window(surface, mouse_pos):
 
                 total_width += image.get_width()
 
-            x = rect.centerx - total_width // 2
+            x = (
+                rect.centerx
+                - total_width // 2
+            )
 
             for image in parts:
 
-                y = rect.centery - image.get_height() // 2
+                y = (
+                    rect.centery
+                    - image.get_height() // 2
+                )
 
                 surface.blit(
                     image,
@@ -2006,6 +2046,11 @@ def draw_bidding_window(surface, mouse_pos):
 
             bid_buttons.append(
                 (rect, bid)
+            )
+
+            current_x += (
+                button_width
+                + gap
             )
 
 
