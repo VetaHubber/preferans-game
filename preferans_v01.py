@@ -1730,11 +1730,11 @@ def draw_bidding_window(surface, mouse_pos):
     # ----------------------------------------------------
 
     window_width = 900
-    window_height = 300
+    window_height = 320
 
     window_rect = pygame.Rect(
-        WIDTH // 2 - window_width // 2,
-        HEIGHT // 2 - window_height // 2,
+        WIDTH // 2 - window_width // 2 + 52,
+        HEIGHT // 2 - window_height // 2 - 70,
         window_width,
         window_height
     )
