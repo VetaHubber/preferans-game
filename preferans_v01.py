@@ -2751,6 +2751,10 @@ def player_make_bid(bid):
 
     player_bids[0] = bid
 
+    bid_history.append(
+        (0, bid)
+    )
+
     if bid != "Пас":
 
         highest_bid = bid
