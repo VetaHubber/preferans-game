@@ -1521,19 +1521,24 @@ def get_bid_value(bid):
         return -1
 
     if bid == "Мизер":
-        return 16
+        return 20
 
     suit_order = {
         "♠": 0,
         "♣": 1,
         "♦": 2,
-        "♥": 3
+        "♥": 3,
+        "БК": 4
     }
 
-    level = int(bid[:-1])
-    suit = bid[-1]
+    if bid.endswith("БК"):
+        level = int(bid[:-2])
+        suit = "БК"
+    else:
+        level = int(bid[:-1])
+        suit = bid[-1]
 
-    return (level - 6) * 4 + suit_order[suit]
+    return (level - 6) * 5 + suit_order[suit]
 
 
 def get_available_bids(player):
