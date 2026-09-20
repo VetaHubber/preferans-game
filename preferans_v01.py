@@ -1786,7 +1786,7 @@ def draw_bidding_window(surface, mouse_pos):
         turn_image,
         turn_image.get_rect(
             center=(
-                WIDTH // 2,
+                window_rect.centerx,
                 window_rect.top + 30
             )
         )
@@ -1848,7 +1848,7 @@ def draw_bidding_window(surface, mouse_pos):
     )
 
     current_x = (
-        WIDTH // 2
+        window_rect.centerx
         - total_width // 2
     )
 
@@ -1941,7 +1941,7 @@ def draw_bidding_window(surface, mouse_pos):
         )
 
         start_x = (
-            WIDTH // 2
+            window_rect.centerx
             - row_width // 2
         )
 
