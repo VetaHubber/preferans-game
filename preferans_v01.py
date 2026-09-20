@@ -1970,29 +1970,454 @@ def estimate_best_bid(hand):
 
     return best_bid
 
+def get_unknown_cards(hand):
+
+    deck = create_deck()
+
+    known_cards = set(hand)
+
+    return [
+        card
+        for card in deck
+        if card not in known_cards
+    ]
+
+
+def choose_discard_for_simulation(cards, contract):
+
+    suit, level = get_bid_contract(contract)
+
+    # --------------------------------------------------------
+    # Мизер:
+    # стараемся избавиться от самых старших карт.
+    # --------------------------------------------------------
+
+    if suit == "Мизер":
+
+        sorted_cards = sorted(
+            cards,
+            key=lambda card: card_strength(card[0]),
+            reverse=True
+        )
+
+        return sorted_cards[:2]
+
+    # --------------------------------------------------------
+    # Игра в масти:
+    # сохраняем козырь, избавляемся от слабых
+    # побочных карт.
+    # --------------------------------------------------------
+
+    if suit in ("♠", "♣", "♦", "♥"):
+
+        discard_candidates = [
+            card
+            for card in cards
+            if card[1] != suit
+        ]
+
+        discard_candidates.sort(
+            key=lambda card: card_strength(card[0])
+        )
+
+        if len(discard_candidates) >= 2:
+
+            return discard_candidates[:2]
+
+        remaining = sorted(
+            cards,
+            key=lambda card: card_strength(card[0])
+        )
+
+        return remaining[:2]
+
+    # --------------------------------------------------------
+    # БК:
+    # избавляемся от самых слабых карт.
+    # --------------------------------------------------------
+
+    sorted_cards = sorted(
+        cards,
+        key=lambda card: card_strength(card[0])
+    )
+
+    return sorted_cards[:2]
+
+
+def card_beats(
+    card,
+    winning_card,
+    lead_suit,
+    trump
+):
+
+    rank, suit = card
+    winning_rank, winning_suit = winning_card
+
+    # Козырь всегда бьёт некозырную карту.
+    if trump is not None:
+
+        if suit == trump and winning_suit != trump:
+
+            return True
+
+        if (
+            winning_suit == trump
+            and suit != trump
+        ):
+
+            return False
+
+    # Карта другой масти не может перебить
+    # карту масти хода.
+    if suit != winning_suit:
+
+        return False
+
+    return (
+        card_strength(rank)
+        > card_strength(winning_rank)
+    )
+
+
+def choose_simulated_card(
+    hand,
+    lead_suit,
+    winning_card,
+    trump,
+    is_declarer
+):
+
+    # --------------------------------------------------------
+    # Если это первый ход взятки,
+    # начинаем с самой сильной карты.
+    # --------------------------------------------------------
+
+    if winning_card is None:
+
+        sorted_hand = sorted(
+            hand,
+            key=lambda card: card_strength(card[0]),
+            reverse=True
+        )
+
+        return sorted_hand[0]
+
+    # --------------------------------------------------------
+    # Сначала обязательно пытаемся идти в масть.
+    # --------------------------------------------------------
+
+    same_suit = [
+        card
+        for card in hand
+        if card[1] == lead_suit
+    ]
+
+    if same_suit:
+
+        beating_cards = [
+            card
+            for card in same_suit
+            if card_beats(
+                card,
+                winning_card,
+                lead_suit,
+                trump
+            )
+        ]
+
+        # ----------------------------------------------------
+        # Защита старается взять взятку,
+        # если это возможно.
+        #
+        # Раздающий старается тратить
+        # минимально необходимую карту.
+        # ----------------------------------------------------
+
+        if is_declarer:
+
+            if beating_cards:
+
+                return min(
+                    beating_cards,
+                    key=lambda card: card_strength(card[0])
+                )
+
+            return min(
+                same_suit,
+                key=lambda card: card_strength(card[0])
+            )
+
+        else:
+
+            if beating_cards:
+
+                return min(
+                    beating_cards,
+                    key=lambda card: card_strength(card[0])
+                )
+
+            return min(
+                same_suit,
+                key=lambda card: card_strength(card[0])
+            )
+
+    # --------------------------------------------------------
+    # В масти хода нет.
+    #
+    # Ищем козырь.
+    # --------------------------------------------------------
+
+    if trump is not None:
+
+        trumps = [
+            card
+            for card in hand
+            if card[1] == trump
+        ]
+
+        if trumps:
+
+            beating_trumps = [
+                card
+                for card in trumps
+                if card_beats(
+                    card,
+                    winning_card,
+                    lead_suit,
+                    trump
+                )
+            ]
+
+            if beating_trumps:
+
+                return min(
+                    beating_trumps,
+                    key=lambda card: card_strength(card[0])
+                )
+
+            return min(
+                trumps,
+                key=lambda card: card_strength(card[0])
+            )
+
+    # --------------------------------------------------------
+    # Нечем брать — отдаём самую слабую карту.
+    # --------------------------------------------------------
+
+    return min(
+        hand,
+        key=lambda card: card_strength(card[0])
+    )
+
+
+def simulate_contract(
+    hand,
+    contract,
+    unknown_cards
+):
+
+    # --------------------------------------------------------
+    # Получаем возможный прикуп.
+    #
+    # Бот его НЕ знает.
+    # Это одна случайная гипотеза.
+    # --------------------------------------------------------
+
+    cards = unknown_cards.copy()
+
+    random.shuffle(cards)
+
+    talon_simulated = cards[:2]
+
+    remaining = cards[2:]
+
+    # --------------------------------------------------------
+    # Бот гипотетически получает прикуп.
+    # --------------------------------------------------------
+
+    expanded_hand = (
+        hand
+        + talon_simulated
+    )
+
+    discard = choose_discard_for_simulation(
+        expanded_hand,
+        contract
+    )
+
+    final_hand = expanded_hand.copy()
+
+    for card in discard:
+
+        final_hand.remove(card)
+
+    # --------------------------------------------------------
+    # Раздаём остальные карты двум защитникам.
+    # --------------------------------------------------------
+
+    random.shuffle(remaining)
+
+    opponent_1 = remaining[:10]
+    opponent_2 = remaining[10:20]
+
+    players = [
+        final_hand,
+        opponent_1,
+        opponent_2
+    ]
+
+    suit, level = get_bid_contract(contract)
+
+    if suit == "БК" or suit == "Мизер":
+
+        trump = None
+
+    else:
+
+        trump = suit
+
+    # --------------------------------------------------------
+    # Игрок 0 — разыгрывающий.
+    # Первым начинает он.
+    # --------------------------------------------------------
+
+    leader = 0
+    declarer_tricks = 0
+
+    for _ in range(10):
+
+        played = []
+
+        winning_card = None
+        winner = leader
+        lead_suit = None
+
+        # ----------------------------------------------------
+        # Три карты одной взятки.
+        # ----------------------------------------------------
+
+        for offset in range(3):
+
+            player = (
+                leader + offset
+            ) % 3
+
+            player_hand = players[player]
+
+            card = choose_simulated_card(
+                player_hand,
+                lead_suit,
+                winning_card,
+                trump,
+                player == 0
+            )
+
+            player_hand.remove(card)
+
+            if lead_suit is None:
+
+                lead_suit = card[1]
+
+            if winning_card is None:
+
+                winning_card = card
+                winner = player
+
+            elif card_beats(
+                card,
+                winning_card,
+                lead_suit,
+                trump
+            ):
+
+                winning_card = card
+                winner = player
+
+            played.append(card)
+
+        # ----------------------------------------------------
+        # Кто взял взятку — тот начинает следующую.
+        # ----------------------------------------------------
+
+        leader = winner
+
+        if winner == 0:
+
+            declarer_tricks += 1
+
+    return declarer_tricks
+
+
+def estimate_contract_probability(
+    hand,
+    contract,
+    simulations=120
+):
+
+    unknown_cards = get_unknown_cards(hand)
+
+    successful = 0
+    total_tricks = 0
+
+    suit, level = get_bid_contract(contract)
+
+    for _ in range(simulations):
+
+        tricks = simulate_contract(
+            hand,
+            contract,
+            unknown_cards
+        )
+
+        total_tricks += tricks
+
+        # ----------------------------------------------------
+        # Для обычной игры нужно выполнить
+        # количество взяток, соответствующее уровню.
+        # ----------------------------------------------------
+
+        if suit == "Мизер":
+
+            if tricks == 0:
+
+                successful += 1
+
+        else:
+
+            required_tricks = level
+
+            if tricks >= required_tricks:
+
+                successful += 1
+
+    probability = (
+        successful
+        / simulations
+    )
+
+    average_tricks = (
+        total_tricks
+        / simulations
+    )
+
+    return probability, average_tricks
+
 def choose_bot_bid(player, available_bids):
 
     # --------------------------------------------------------
-    # Доцент видит только свои карты.
-    #
-    # Чужие карты и прикуп здесь НЕ используются.
+    # Доцент видит только собственную руку.
     # --------------------------------------------------------
 
     hand = player_hands[player]
-
-    # --------------------------------------------------------
-    # Если объявлять уже нечего — Пас.
-    # --------------------------------------------------------
 
     if len(available_bids) == 1:
 
         return "Пас"
 
     # --------------------------------------------------------
-    # Оцениваем каждую доступную заявку.
-    #
-    # Чем выше confidence, тем увереннее бот
-    # в возможности выполнить контракт.
+    # Проверяем каждую доступную заявку
+    # через случайные возможные раздачи.
     # --------------------------------------------------------
 
     evaluations = []
@@ -2003,99 +2428,76 @@ def choose_bot_bid(player, available_bids):
 
             continue
 
-        confidence = estimate_bid_confidence(
-            hand,
-            bid
+        probability, average_tricks = (
+            estimate_contract_probability(
+                hand,
+                bid,
+                120
+            )
         )
 
         evaluations.append(
             (
                 bid,
-                confidence
+                probability,
+                average_tricks
             )
         )
-
-    # --------------------------------------------------------
-    # Если заявок нет — Пас.
-    # --------------------------------------------------------
 
     if not evaluations:
 
         return "Пас"
 
     # --------------------------------------------------------
-    # Сортируем заявки от самой слабой
-    # к самой сильной.
+    # Для отладки пока показываем,
+    # что именно "думает" ИИ.
     # --------------------------------------------------------
 
-    evaluations.sort(
+    print()
+    print(
+        "ИИ:",
+        player,
+        hand
+    )
+
+    for bid, probability, average_tricks in evaluations:
+
+        print(
+            bid,
+            "успех:",
+            round(probability * 100, 1),
+            "%",
+            "средние взятки:",
+            round(average_tricks, 2)
+        )
+
+    # --------------------------------------------------------
+    # Выбираем заявку.
+    #
+    # Сначала рассматриваем только те,
+    # где вероятность выполнения не меньше 55%.
+    # --------------------------------------------------------
+
+    reasonable = [
+        item
+        for item in evaluations
+        if item[1] >= 0.55
+    ]
+
+    if not reasonable:
+
+        return "Пас"
+
+    # --------------------------------------------------------
+    # Из достаточно надёжных заявок выбираем
+    # самую высокую по торговле.
+    # --------------------------------------------------------
+
+    reasonable.sort(
         key=lambda item: get_bid_value(item[0])
     )
 
-    # --------------------------------------------------------
-    # Ищем самую высокую заявку,
-    # которую рука ещё позволяет рассматривать.
-    #
-    # Запас +3 означает:
-    #
-    # +3 и выше → достаточно уверенно
-    #  0...+2 → погранично
-    # ниже 0 → рискованно
-    # --------------------------------------------------------
-
-    safe_bids = []
-
-    for bid, confidence in evaluations:
-
-        if confidence >= 3:
-
-            safe_bids.append(
-                (
-                    bid,
-                    confidence
-                )
-            )
-
-    # --------------------------------------------------------
-    # Если есть уверенные заявки,
-    # берём самую высокую из них.
-    # --------------------------------------------------------
-
-    if safe_bids:
-
-        return safe_bids[-1][0]
-
-    # --------------------------------------------------------
-    # Если уверенной заявки нет,
-    # проверяем пограничные варианты.
-    #
-    # Это позволяет боту иногда рисковать,
-    # как человек.
-    # --------------------------------------------------------
-
-    borderline_bids = []
-
-    for bid, confidence in evaluations:
-
-        if confidence >= 0:
-
-            borderline_bids.append(
-                (
-                    bid,
-                    confidence
-                )
-            )
-
-    if borderline_bids:
-
-        return borderline_bids[-1][0]
-
-    # --------------------------------------------------------
-    # Если даже 6-я игра выглядит плохо —
-    # Пас.
-    # --------------------------------------------------------
-
-    return "Пас"
+    return reasonable[-1][0]
 
 def bot_make_bid(player):
 
