@@ -1729,7 +1729,7 @@ def draw_bidding_window(surface, mouse_pos):
     # Размер окна
     # ----------------------------------------------------
 
-    window_width = 900
+    window_width = 865
     window_height = 320
 
     window_rect = pygame.Rect(
