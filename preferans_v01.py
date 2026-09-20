@@ -1600,20 +1600,66 @@ def get_card_rank_value(rank):
     return rank_values[rank]
 
 
-def estimate_best_bid(hand):
+def get_bid_contract(bid):
 
-    # --------------------------------------------------------
-    # Считаем силу каждой масти.
-    # --------------------------------------------------------
+    if bid == "Мизер":
+        return "Мизер", None
 
-    suit_strength = {
-        "♠": 0,
-        "♣": 0,
-        "♦": 0,
-        "♥": 0
+    if bid.endswith("БК"):
+
+        level = int(bid[:-2])
+
+        return "БК", level
+
+    level = int(bid[:-1])
+    suit = bid[-1]
+
+    return suit, level
+
+
+def card_strength(rank):
+
+    values = {
+        "7": 0,
+        "8": 1,
+        "9": 2,
+        "10": 3,
+        "В": 4,
+        "Д": 5,
+        "К": 6,
+        "Т": 7
     }
 
-    suit_count = {
+    return values[rank]
+
+
+def analyze_hand_for_contract(hand, contract):
+
+    suit, level = get_bid_contract(contract)
+
+    if suit == "Мизер":
+
+        return analyze_misere_hand(hand)
+
+    if suit == "БК":
+
+        return analyze_no_trump_hand(hand, level)
+
+    return analyze_suit_hand(
+        hand,
+        suit,
+        level
+    )
+
+
+def analyze_suit_hand(hand, trump, level):
+
+    score = 0
+
+    trump_cards = []
+    side_cards = []
+
+    suit_counts = {
         "♠": 0,
         "♣": 0,
         "♦": 0,
@@ -1622,73 +1668,307 @@ def estimate_best_bid(hand):
 
     for rank, suit in hand:
 
-        suit_count[suit] += 1
+        suit_counts[suit] += 1
 
-        rank_value = get_card_rank_value(rank)
+        if suit == trump:
 
-        # Старшие карты получают больший вес.
-        suit_strength[suit] += rank_value
+            trump_cards.append(rank)
+
+        else:
+
+            side_cards.append(
+                (rank, suit)
+            )
+
+    # --------------------------------------------------------
+    # Сила козырной масти
+    # --------------------------------------------------------
+
+    for rank in trump_cards:
+
+        value = card_strength(rank)
+
+        score += value * 1.6
 
         if rank == "Т":
-            suit_strength[suit] += 4
+
+            score += 6
 
         elif rank == "К":
-            suit_strength[suit] += 2
+
+            score += 3
 
         elif rank == "Д":
-            suit_strength[suit] += 1
+
+            score += 1
 
     # --------------------------------------------------------
-    # Ищем лучшую масть.
+    # Длина козыря
     # --------------------------------------------------------
 
-    best_suit = None
-    best_score = 0
+    trump_length = len(trump_cards)
 
-    for suit in suit_strength:
+    if trump_length >= 5:
 
-        score = suit_strength[suit]
+        score += 7
 
-        # Длина масти важна.
-        score += suit_count[suit] * 2
+    elif trump_length == 4:
 
-        if score > best_score:
+        score += 4
 
-            best_score = score
-            best_suit = suit
+    elif trump_length == 3:
 
-    # --------------------------------------------------------
-    # Очень слабая рука.
-    # --------------------------------------------------------
-
-    if best_suit is None:
-
-        return None
-
-    if best_score < 18:
-
-        return None
+        score += 1
 
     # --------------------------------------------------------
-    # Примерная оценка уровня игры.
+    # Старшие карты в других мастях
+    # --------------------------------------------------------
+
+    for rank, suit in side_cards:
+
+        if rank == "Т":
+
+            score += 4
+
+        elif rank == "К":
+
+            score += 1.5
+
+        elif rank == "Д":
+
+            score += 0.5
+
+    # --------------------------------------------------------
+    # Длинные побочные масти
+    # --------------------------------------------------------
+
+    for suit_name in suit_counts:
+
+        if suit_name == trump:
+
+            continue
+
+        count = suit_counts[suit_name]
+
+        if count >= 5:
+
+            score += 2
+
+        elif count == 4:
+
+            score += 1
+
+    # --------------------------------------------------------
+    # Чем выше контракт, тем больше требуется силы.
     #
-    # Это пока НЕ окончательный ИИ.
-    # Мы только закладываем основу.
+    # Это НЕ означает автоматический отказ.
+    # Это лишь увеличивает необходимый порог.
     # --------------------------------------------------------
 
-    if best_score >= 32:
+    required = {
+        6: 20,
+        7: 27,
+        8: 34,
+        9: 41,
+        10: 48
+    }
 
-        level = 8
+    target = required.get(
+        level,
+        48
+    )
 
-    elif best_score >= 27:
+    # --------------------------------------------------------
+    # Запас силы относительно требуемого уровня.
+    # --------------------------------------------------------
 
-        level = 7
+    confidence = score - target
 
-    else:
+    return confidence
 
-        level = 6
 
-    return f"{level}{best_suit}"
+def analyze_no_trump_hand(hand, level):
+
+    score = 0
+
+    suit_counts = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    for rank, suit in hand:
+
+        suit_counts[suit] += 1
+
+        if rank == "Т":
+
+            score += 7
+
+        elif rank == "К":
+
+            score += 3
+
+        elif rank == "Д":
+
+            score += 1
+
+        elif rank == "В":
+
+            score += 0.3
+
+    # --------------------------------------------------------
+    # В БК длина масти менее важна,
+    # но наличие нескольких карт одной масти
+    # всё равно помогает контролировать масть.
+    # --------------------------------------------------------
+
+    for suit in suit_counts:
+
+        count = suit_counts[suit]
+
+        if count >= 5:
+
+            score += 2
+
+        elif count == 4:
+
+            score += 1
+
+    required = {
+        6: 25,
+        7: 32,
+        8: 39,
+        9: 46,
+        10: 53
+    }
+
+    target = required.get(
+        level,
+        53
+    )
+
+    return score - target
+
+
+def analyze_misere_hand(hand):
+
+    score = 0
+
+    # --------------------------------------------------------
+    # Для мизера нужны слабые карты.
+    #
+    # Чем больше мелких карт и коротких мастей,
+    # тем лучше.
+    # --------------------------------------------------------
+
+    suit_counts = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    for rank, suit in hand:
+
+        suit_counts[suit] += 1
+
+        value = card_strength(rank)
+
+        # Маленькая карта полезна для мизера.
+        score += (
+            7 - value
+        )
+
+    # --------------------------------------------------------
+    # Короткие масти позволяют легче избавляться
+    # от опасных карт.
+    # --------------------------------------------------------
+
+    for suit in suit_counts:
+
+        count = suit_counts[suit]
+
+        if count == 1:
+
+            score += 4
+
+        elif count == 2:
+
+            score += 2
+
+    # --------------------------------------------------------
+    # Старшие карты особенно опасны.
+    # --------------------------------------------------------
+
+    for rank, suit in hand:
+
+        if rank == "Т":
+
+            score -= 7
+
+        elif rank == "К":
+
+            score -= 4
+
+        elif rank == "Д":
+
+            score -= 2
+
+    return score
+
+
+def estimate_bid_confidence(hand, bid):
+
+    # --------------------------------------------------------
+    # Оцениваем конкретную заявку.
+    #
+    # Результат:
+    #
+    # положительный → заявка выглядит реалистично
+    # отрицательный → заявка рискованна
+    # --------------------------------------------------------
+
+    return analyze_hand_for_contract(
+        hand,
+        bid
+    )
+
+
+def estimate_best_bid(hand):
+
+    # --------------------------------------------------------
+    # Эта функция теперь не принимает решение сама.
+    #
+    # Она оставлена как совместимость со старым кодом.
+    # Реальное решение будет принимать choose_bot_bid().
+    # --------------------------------------------------------
+
+    best_bid = None
+    best_confidence = -999
+
+    for bid in BID_OPTIONS:
+
+        if bid == "Пас":
+
+            continue
+
+        confidence = estimate_bid_confidence(
+            hand,
+            bid
+        )
+
+        if confidence > best_confidence:
+
+            best_confidence = confidence
+            best_bid = bid
+
+    if best_bid is None:
+
+        return None
+
+    return best_bid
 
 def choose_bot_bid(player, available_bids):
 
