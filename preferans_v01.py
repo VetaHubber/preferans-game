@@ -1726,13 +1726,13 @@ def draw_whist_phase(surface, mouse_pos):
 
     title_font = pygame.font.SysFont(
         "Georgia",
-        64,
+        94,
         bold=True
     )
 
     button_font = pygame.font.SysFont(
         "Georgia",
-        42,
+        82,
         bold=True
     )
 
