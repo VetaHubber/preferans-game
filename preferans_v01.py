@@ -1905,7 +1905,7 @@ def get_bid_value(bid):
     if bid == "":
         return -1
 
-    if bid == "Пас":
+    if bid in ("Пас", "Мизер"):
         return -1
 
     if bid == "Мизер":
@@ -3667,7 +3667,16 @@ def draw_bidding_window(surface, mouse_pos):
 
     else:
 
-        options_source = BID_OPTIONS
+        available_bids = get_available_bids(
+        	0
+
+        )
+
+        options_source = [
+        	bid
+        	for bid in BID_OPTIONS
+        	if bid in available_bids
+        ]
 
     current_row = []
     current_width = 0
@@ -4231,7 +4240,13 @@ def main():
 
                             discard_selection.clear()
 
-                            game_phase = "contract"
+                            if declarer_contract == "Мизер":
+
+                                game_phase = "whist"
+
+                            else:
+
+                                game_phase = "contract"
 
                             continue
 
