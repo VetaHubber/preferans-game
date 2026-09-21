@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.622
+# Преферанс — версия 0.623
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -154,6 +154,7 @@ tricks_won = [0, 0, 0]
 game_phase = "bidding"
 declarer = None
 declarer_contract = ""
+talon_taken = False
 
 # Прямоугольники кнопок торговли
 bid_buttons = []
@@ -178,6 +179,10 @@ def start_bidding():
     global tricks_won
     global player_passed
     global bid_history
+    global game_phase
+    global declarer
+    global declarer_contract
+    global talon_taken
 
     dealer = random.randint(0, 2)
 
@@ -193,6 +198,11 @@ def start_bidding():
     bid_history = []
 
     opponent_actions = ["", ""]
+
+    game_phase = "bidding"
+    declarer = None
+    declarer_contract = ""
+    talon_taken = False
 
 
 # ============================================================
@@ -2889,6 +2899,70 @@ def draw_talon_phase(surface):
             )
         )
 
+def take_talon():
+
+    global game_phase
+    global talon_taken
+    global player_hands
+
+    if game_phase != "talon":
+        return
+
+    if declarer != 0:
+        return
+
+    if talon_taken:
+        return
+
+    # --------------------------------------------------------
+    # Забираем обе карты прикупа в нашу руку.
+    # --------------------------------------------------------
+
+    player_hands[0].extend(talon)
+
+    # --------------------------------------------------------
+    # Сортируем руку.
+    # --------------------------------------------------------
+
+    suit_order = {
+        "♠": 0,
+        "♣": 1,
+        "♦": 2,
+        "♥": 3
+    }
+
+    rank_order = {
+        "7": 0,
+        "8": 1,
+        "9": 2,
+        "10": 3,
+        "В": 4,
+        "Д": 5,
+        "К": 6,
+        "Т": 7
+    }
+
+    player_hands[0].sort(
+        key=lambda card: (
+            suit_order[card[1]],
+            rank_order[card[0]]
+        )
+    )
+
+    # --------------------------------------------------------
+    # Прикуп больше не показываем.
+    # --------------------------------------------------------
+
+    talon_taken = True
+
+    # --------------------------------------------------------
+    # Следующий этап.
+    # Пока временно возвращаемся к игре.
+    # Снос сделаем следующим шагом.
+    # --------------------------------------------------------
+
+    game_phase = "discard"
+
 def draw_bidding_window(surface, mouse_pos):
 
     global bid_buttons
@@ -3511,6 +3585,16 @@ def main():
                                 player_make_bid(bid)
 
                                 break
+
+                    # ----------------------------------------
+                    # Получение прикупа
+                    # ----------------------------------------
+
+                    elif game_started and game_phase == "talon":
+
+                        if declarer == 0:
+
+                            take_talon()
 
                     # ----------------------------------------
                     # Главное меню
