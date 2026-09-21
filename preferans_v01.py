@@ -1963,6 +1963,26 @@ def get_available_bids(player):
 
     return available
 
+
+def get_available_contracts():
+
+    available = []
+
+    current_value = get_bid_value(
+        highest_bid
+    )
+
+    for bid in BID_OPTIONS:
+
+        if bid == "Пас":
+            continue
+
+        if get_bid_value(bid) >= current_value:
+            available.append(bid)
+
+    return available
+
+
 def get_card_rank_value(rank):
 
     rank_values = {
@@ -3167,6 +3187,28 @@ def player_make_bid(bid):
 
     next_bidder()
 
+
+def player_make_contract(contract):
+
+    global declarer_contract
+    global game_phase
+
+    if game_phase != "contract":
+        return
+
+    if declarer != 0:
+        return
+
+    available_contracts = get_available_contracts()
+
+    if contract not in available_contracts:
+        return
+
+    declarer_contract = contract
+
+    game_phase = "whist"
+
+
 def draw_talon_phase(surface):
 
     if game_phase != "talon":
@@ -3319,7 +3361,10 @@ def draw_bidding_window(surface, mouse_pos):
 
     bid_buttons = []
 
-    if not bidding_active:
+    if (
+        not bidding_active
+        and game_phase != "contract"
+    ):
         return
 
     # ----------------------------------------------------
@@ -3359,7 +3404,11 @@ def draw_bidding_window(surface, mouse_pos):
     # Информация о ходе
     # ----------------------------------------------------
 
-    if current_bidder == 0:
+    if game_phase == "contract":
+
+        turn_text = "Ваш окончательный заказ"
+
+    elif current_bidder == 0:
 
         turn_text = "Ваш ход"
 
@@ -3393,10 +3442,19 @@ def draw_bidding_window(surface, mouse_pos):
     # Текущая заявка
     # ----------------------------------------------------
 
-    current_text = (
-        "Текущая заявка: "
-        + (highest_bid if highest_bid else "нет")
-    )
+    if game_phase == "contract":
+
+        current_text = (
+            "Торговля выиграна: "
+            + highest_bid
+        )
+
+    else:
+
+        current_text = (
+            "Текущая заявка: "
+            + (highest_bid if highest_bid else "нет")
+        )
 
     normal_font = pygame.font.SysFont(
         "Georgia",
@@ -3469,7 +3527,10 @@ def draw_bidding_window(surface, mouse_pos):
     # Если сейчас ход бота — кнопки не показываем
     # ----------------------------------------------------
 
-    if current_bidder != 0:
+    if (
+        game_phase == "bidding"
+        and current_bidder != 0
+    ):
         return
 
     # ----------------------------------------------------
@@ -3488,10 +3549,22 @@ def draw_bidding_window(surface, mouse_pos):
 
     rows = []
 
-    for i in range(0, len(BID_OPTIONS), columns):
+    if game_phase == "contract":
+
+        options_source = get_available_contracts()
+
+    else:
+
+        options_source = BID_OPTIONS
+
+    for i in range(
+        0,
+        len(options_source),
+        columns
+    ):
 
         rows.append(
-            BID_OPTIONS[i:i + columns]
+            options_source[i:i + columns]
         )
 
     # ----------------------------------------------------
@@ -3947,6 +4020,18 @@ def main():
 
                             take_talon()
 
+                    elif game_started and game_phase == "contract":
+
+                        for rect, contract in bid_buttons:
+
+                            if rect.collidepoint(event.pos):
+
+                                player_make_contract(
+                                    contract
+                                )
+
+                                break
+
                     # ----------------------------------------
                     # Выбор карт для сноса
                     # ----------------------------------------
@@ -3982,7 +4067,7 @@ def main():
 
                             discard_selection.clear()
 
-                            game_phase = "whist"
+                            game_phase = "contract"
 
                             continue
 
@@ -4144,7 +4229,10 @@ def main():
             draw_player_action(screen)
             draw_players(screen)
 
-            if game_phase == "bidding":
+            if (
+                game_phase == "bidding"
+                or game_phase == "contract"
+            ):
             	draw_bidding_window(
             		screen,
             		mouse_pos
