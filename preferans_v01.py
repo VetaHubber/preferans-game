@@ -1160,7 +1160,11 @@ def draw_player_action(surface):
     if not player_bids[0]:
         return
 
-    text = player_bids[0]
+    text = (
+        declarer_contract
+        if game_phase in ("whist", "whist_done")
+        else player_bids[0]
+    )
 
     action_font = pygame.font.SysFont(
         "Georgia",
@@ -3545,8 +3549,6 @@ def draw_bidding_window(surface, mouse_pos):
     # Раскладываем заявки по строкам
     # ----------------------------------------------------
 
-    columns = 7
-
     rows = []
 
     if game_phase == "contract":
@@ -3557,15 +3559,67 @@ def draw_bidding_window(surface, mouse_pos):
 
         options_source = BID_OPTIONS
 
-    for i in range(
-        0,
-        len(options_source),
-        columns
-    ):
+    current_row = []
+    current_width = 0
 
-        rows.append(
-            options_source[i:i + columns]
+    available_width = (
+        window_rect.width
+        - button_padding * 2
+    )
+
+    for bid in options_source:
+
+        text_width = 0
+
+        for char in bid:
+
+            if char in ("♠", "♣", "♦", "♥"):
+
+                image = BID_SUIT_FONT.render(
+                    char,
+                    True,
+                    BLACK
+                )
+
+            else:
+
+                image = BID_TEXT_FONT.render(
+                    char,
+                    True,
+                    BLACK
+                )
+
+            text_width += image.get_width()
+
+        bid_width = (
+            text_width
+            + button_padding * 2
+            - 5
         )
+
+        if (
+            current_row
+            and current_width
+            + gap
+            + bid_width
+            > available_width
+        ):
+
+            rows.append(current_row)
+
+            current_row = []
+            current_width = 0
+
+        if current_row:
+
+            current_width += gap
+
+        current_row.append(bid)
+        current_width += bid_width
+
+    if current_row:
+
+        rows.append(current_row)
 
     # ----------------------------------------------------
     # Рисуем строки
