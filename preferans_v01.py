@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.621
+# Преферанс — версия 0.622
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -146,6 +146,14 @@ opponent_actions = ["", ""]
 
 # Количество взяток у игроков
 tricks_won = [0, 0, 0]
+
+# ============================================================
+# СОСТОЯНИЕ ПОСЛЕ ТОРГОВЛИ
+# ============================================================
+
+game_phase = "bidding"
+declarer = None
+declarer_contract = ""
 
 # Прямоугольники кнопок торговли
 bid_buttons = []
@@ -1489,38 +1497,40 @@ def draw_game_cards(surface):
     # Прикуп — две закрытые карты справа от надписи
     # --------------------------------------------------------
 
-    talon_x = WIDTH // 2 + 80
-    talon_y = 30
+    if game_phase == "bidding":
 
-    talon_label = font.render(
-        "ПРИКУП",
-        True,
-        GOLD_LIGHT
-    )
+        talon_x = WIDTH // 2 + 80
+        talon_y = 30
 
-    surface.blit(
-        talon_label,
-        talon_label.get_rect(
-            midright=(
-                talon_x - 15,
-                talon_y + 65
+        talon_label = font.render(
+            "ПРИКУП",
+            True,
+            GOLD_LIGHT
+        )
+
+        surface.blit(
+            talon_label,
+            talon_label.get_rect(
+                midright=(
+                    talon_x - 15,
+                    talon_y + 65
+                )
             )
         )
-    )
 
-    for index in range(2):
+        for index in range(2):
 
-        rect = pygame.Rect(
-            talon_x + index * 16,
-            talon_y - 10,
-            CARD_W,
-            CARD_H
-        )
+            rect = pygame.Rect(
+                talon_x + index * 16,
+                talon_y - 10,
+                CARD_W,
+                CARD_H
+            )
 
-        draw_card_back(
-            surface,
-            rect
-        )
+            draw_card_back(
+                surface,
+                rect
+            )
 
 # ============================================================
 # ТОРГОВЛЯ
@@ -2680,6 +2690,32 @@ def bot_make_bid(player):
 
     thread.start()
 
+def start_talon_phase():
+
+    global game_phase
+    global declarer
+    global declarer_contract
+
+    # --------------------------------------------------------
+    # Находим победителя торговли.
+    # --------------------------------------------------------
+
+    declarer = None
+
+    for player in range(3):
+
+        if player_bids[player] == highest_bid:
+
+            declarer = player
+            break
+
+    if declarer is None:
+        return
+
+    declarer_contract = highest_bid
+
+    game_phase = "talon"
+
 
 def next_bidder():
 
@@ -2719,6 +2755,9 @@ def next_bidder():
 
             bidding_active = False
             bidding_finished = True
+
+            start_talon_phase()
+
             return
 
     # --------------------------------------------------------
@@ -2767,6 +2806,88 @@ def player_make_bid(bid):
         highest_bid = bid
 
     next_bidder()
+
+def draw_talon_phase(surface):
+
+    if game_phase != "talon":
+        return
+
+    # --------------------------------------------------------
+    # Заголовок
+    # --------------------------------------------------------
+
+    title = pygame.font.SysFont("roboto", 96).render(
+        "ПРИКУП",
+        True,
+        GOLD
+    )
+
+    surface.blit(
+        title,
+        title.get_rect(
+            center=(
+                WIDTH // 2,
+                210
+            )
+        )
+    )
+
+    # --------------------------------------------------------
+    # Если прикуп принадлежит нам —
+    # показываем две карты.
+    # --------------------------------------------------------
+
+    if declarer == 0:
+
+        card_gap = 30
+
+        total_width = (
+            CARD_W * 2
+            + card_gap
+        )
+
+        start_x = (
+            WIDTH // 2
+            - total_width // 2
+        )
+
+        y = 320
+
+        for index, card in enumerate(talon):
+
+            rect = pygame.Rect(
+                start_x
+                + index * (CARD_W + card_gap),
+                y,
+                CARD_W,
+                CARD_H
+            )
+
+            draw_card_face(
+                surface,
+                rect,
+                card[0],
+                card[1]
+            )
+
+
+    else:
+
+        text = font.render(
+            f"Прикуп у {names[declarer]}",
+            True,
+            IVORY
+        )
+
+        surface.blit(
+            text,
+            text.get_rect(
+                center=(
+                    WIDTH // 2,
+                    390
+                )
+            )
+        )
 
 def draw_bidding_window(surface, mouse_pos):
 
@@ -3478,10 +3599,15 @@ def main():
             draw_opponent_actions(screen)
             draw_player_action(screen)
             draw_players(screen)
-            draw_bidding_window(
-                screen,
-                mouse_pos
-            )
+
+            if game_phase == "bidding":
+            	draw_bidding_window(
+            		screen,
+            		mouse_pos
+            	)
+
+            elif game_phase == "talon":
+            	draw_talon_phase(screen)
 
         pygame.display.flip()
 
