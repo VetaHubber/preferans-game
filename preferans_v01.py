@@ -2492,22 +2492,97 @@ def choose_simulated_card(
 ):
 
     # --------------------------------------------------------
-    # Если это первый ход взятки,
-    # начинаем с самой сильной карты.
+    # Первый ход взятки.
+    #
+    # Разыгрывающий старается сначала использовать
+    # сильные побочные карты, особенно Тузы.
+    #
+    # Если Туза нет — выбирает сильную карту
+    # из самой длинной побочной масти.
     # --------------------------------------------------------
 
     if winning_card is None:
 
-        sorted_hand = sorted(
+        if is_declarer:
+
+            aces = [
+                card
+                for card in hand
+                if card[0] == "Т"
+                and (
+                    trump is None
+                    or card[1] != trump
+                )
+            ]
+
+            if aces:
+                return aces[0]
+
+            suit_groups = {}
+
+            for card in hand:
+
+                if (
+                    trump is not None
+                    and card[1] == trump
+                ):
+                    continue
+
+                suit_groups.setdefault(
+                    card[1],
+                    []
+                ).append(card)
+
+            if suit_groups:
+
+                longest_suit = max(
+                    suit_groups,
+                    key=lambda suit: len(
+                        suit_groups[suit]
+                    )
+                )
+
+                return max(
+                    suit_groups[longest_suit],
+                    key=lambda card: card_strength(
+                        card[0]
+                    )
+                )
+
+        # ----------------------------------------------------
+        # Защитник.
+        #
+        # Начинаем с сильной карты побочной масти,
+        # стараясь не выбрасывать козырь первым ходом.
+        # ----------------------------------------------------
+
+        non_trumps = [
+            card
+            for card in hand
+            if (
+                trump is None
+                or card[1] != trump
+            )
+        ]
+
+        if non_trumps:
+
+            return max(
+                non_trumps,
+                key=lambda card: card_strength(
+                    card[0]
+                )
+            )
+
+        return max(
             hand,
-            key=lambda card: card_strength(card[0]),
-            reverse=True
+            key=lambda card: card_strength(
+                card[0]
+            )
         )
 
-        return sorted_hand[0]
-
     # --------------------------------------------------------
-    # Сначала обязательно пытаемся идти в масть.
+    # Сначала обязательно идём в масть хода.
     # --------------------------------------------------------
 
     same_suit = [
@@ -2530,11 +2605,12 @@ def choose_simulated_card(
         ]
 
         # ----------------------------------------------------
-        # Защита старается взять взятку,
-        # если это возможно.
+        # Разыгрывающий.
         #
-        # Раздающий старается тратить
-        # минимально необходимую карту.
+        # Если можно взять взятку —
+        # берём минимальной картой.
+        #
+        # Если взять нельзя — отдаём минимальную.
         # ----------------------------------------------------
 
         if is_declarer:
@@ -2543,30 +2619,44 @@ def choose_simulated_card(
 
                 return min(
                     beating_cards,
-                    key=lambda card: card_strength(card[0])
+                    key=lambda card: card_strength(
+                        card[0]
+                    )
                 )
 
             return min(
                 same_suit,
-                key=lambda card: card_strength(card[0])
+                key=lambda card: card_strength(
+                    card[0]
+                )
             )
 
-        else:
+        # ----------------------------------------------------
+        # Защитник.
+        #
+        # Защитник тоже старается взять взятку,
+        # но если уже понятно, что карта не перебивается,
+        # отдаёт минимальную.
+        # ----------------------------------------------------
 
-            if beating_cards:
-
-                return min(
-                    beating_cards,
-                    key=lambda card: card_strength(card[0])
-                )
+        if beating_cards:
 
             return min(
-                same_suit,
-                key=lambda card: card_strength(card[0])
+                beating_cards,
+                key=lambda card: card_strength(
+                    card[0]
+                )
             )
+
+        return min(
+            same_suit,
+            key=lambda card: card_strength(
+                card[0]
+            )
+        )
 
     # --------------------------------------------------------
-    # В масти хода нет.
+    # Масти хода нет.
     #
     # Ищем козырь.
     # --------------------------------------------------------
@@ -2596,21 +2686,31 @@ def choose_simulated_card(
 
                 return min(
                     beating_trumps,
-                    key=lambda card: card_strength(card[0])
+                    key=lambda card: card_strength(
+                        card[0]
+                    )
                 )
 
+            # Если козырем взять нельзя,
+            # всё равно скидываем минимальный козырь.
             return min(
                 trumps,
-                key=lambda card: card_strength(card[0])
+                key=lambda card: card_strength(
+                    card[0]
+                )
             )
 
     # --------------------------------------------------------
-    # Нечем брать — отдаём самую слабую карту.
+    # Нечем брать и масти хода нет.
+    #
+    # Сбрасываем самую слабую карту.
     # --------------------------------------------------------
 
     return min(
         hand,
-        key=lambda card: card_strength(card[0])
+        key=lambda card: card_strength(
+            card[0]
+        )
     )
 
 
@@ -2888,7 +2988,7 @@ def choose_bot_bid(
     reasonable = [
         item
         for item in evaluations
-        if item[1] >= 0.55
+        if item[1] >= 0.45
     ]
 
     if not reasonable:
