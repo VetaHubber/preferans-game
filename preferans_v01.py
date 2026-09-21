@@ -1484,7 +1484,7 @@ def draw_game_cards(surface):
             )
 
             highlight.fill(
-                (120, 255, 120, 75)
+                (19, 235, 48, 5)
             )
 
             surface.blit(
@@ -1494,7 +1494,7 @@ def draw_game_cards(surface):
 
             pygame.draw.rect(
                 surface,
-                (140, 255, 140),
+                GREEN,
                 rect,
                 width=3,
                 border_radius=7
@@ -1613,7 +1613,7 @@ def draw_discard_button(surface, mouse_pos):
 
         pygame.draw.rect(
             surface,
-            GREEN_LIGHT,
+            (125, 9, 9),
             discard_button_rect,
             border_radius=10
         )
@@ -1640,7 +1640,7 @@ def draw_discard_button(surface, mouse_pos):
     text = discard_font.render(
         "СНЕСТИ",
         True,
-        RED
+        GOLD
     )
 
     surface.blit(
