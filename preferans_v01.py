@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.625
+# Преферанс — версия 0.626
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -1647,6 +1647,59 @@ def draw_discard_button(surface, mouse_pos):
         text,
         text.get_rect(
             center=discard_button_rect.center
+        )
+    )
+
+# ============================================================
+# СОСТОЯНИЕ ПОСЛЕ СНОСА
+# ============================================================
+
+def draw_discard_done(surface):
+
+    if game_phase != "discard_done":
+        return
+
+    title_font = pygame.font.SysFont(
+        "Georgia",
+        64,
+        bold=True
+    )
+
+    text_font = pygame.font.SysFont(
+        "Georgia",
+        34,
+        bold=True
+    )
+
+    title = title_font.render(
+        "СНОС ЗАВЕРШЁН",
+        True,
+        GOLD
+    )
+
+    surface.blit(
+        title,
+        title.get_rect(
+            center=(
+                WIDTH // 2,
+                220
+            )
+        )
+    )
+
+    text = text_font.render(
+        "Ожидание вистующих...",
+        True,
+        IVORY
+    )
+
+    surface.blit(
+        text,
+        text.get_rect(
+            center=(
+                WIDTH // 2,
+                290
+            )
         )
     )
 
@@ -3905,6 +3958,9 @@ def main():
             		screen,
             		mouse_pos
             	)
+
+            elif game_phase == "discard_done":
+            	draw_discard_done(screen)
 
         pygame.display.flip()
 
