@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.623
+# Преферанс — версия 0.624
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -154,6 +154,10 @@ tricks_won = [0, 0, 0]
 game_phase = "bidding"
 declarer = None
 declarer_contract = ""
+
+discard_selection = []
+discard_button_rect = None
+
 talon_taken = False
 
 # Прямоугольники кнопок торговли
@@ -198,6 +202,8 @@ def start_bidding():
     bid_history = []
 
     opponent_actions = ["", ""]
+
+    discard_selection.clear()
 
     game_phase = "bidding"
     declarer = None
@@ -1445,9 +1451,16 @@ def draw_game_cards(surface):
 
             current_x += new_suit_gap
 
+        selected = index in discard_selection
+
+        card_y = y
+
+        if selected:
+            card_y -= 20
+
         rect = pygame.Rect(
             current_x,
-            y,
+            card_y,
             CARD_W,
             CARD_H
         )
@@ -1458,6 +1471,34 @@ def draw_game_cards(surface):
             rank,
             suit
         )
+
+        # ----------------------------------------------------
+        # Салатовая полупрозрачная подсветка выбранной карты
+        # ----------------------------------------------------
+
+        if selected:
+
+            highlight = pygame.Surface(
+                (CARD_W, CARD_H),
+                pygame.SRCALPHA
+            )
+
+            highlight.fill(
+                (120, 255, 120, 75)
+            )
+
+            surface.blit(
+                highlight,
+                rect
+            )
+
+            pygame.draw.rect(
+                surface,
+                (140, 255, 140),
+                rect,
+                width=3,
+                border_radius=7
+            )
 
         current_x += same_suit_step
 
@@ -1541,6 +1582,73 @@ def draw_game_cards(surface):
                 surface,
                 rect
             )
+
+def draw_discard_button(surface, mouse_pos):
+
+    global discard_button_rect
+
+    discard_button_rect = None
+
+    if game_phase != "discard":
+        return
+
+    if len(discard_selection) != 2:
+        return
+
+    button_width = 340
+    button_height = 95
+
+    discard_button_rect = pygame.Rect(
+        WIDTH // 2 - button_width // 2,
+        HEIGHT - 450,
+        button_width,
+        button_height
+    )
+
+    hovered = discard_button_rect.collidepoint(
+        mouse_pos
+    )
+
+    if hovered:
+
+        pygame.draw.rect(
+            surface,
+            GREEN_LIGHT,
+            discard_button_rect,
+            border_radius=10
+        )
+
+    else:
+
+        pygame.draw.rect(
+            surface,
+            BLACK,
+            discard_button_rect,
+            border_radius=10
+        )
+
+    pygame.draw.rect(
+        surface,
+        GOLD,
+        discard_button_rect,
+        width=2,
+        border_radius=10
+    )
+
+    discard_font = pygame.font.SysFont("Georgia", 67, bold=True)
+
+    text = discard_font.render(
+        "СНЕСТИ",
+        True,
+        RED
+    )
+
+    surface.blit(
+        text,
+        text.get_rect(
+            center=discard_button_rect.center
+        )
+    )
 
 # ============================================================
 # ТОРГОВЛЯ
@@ -3597,6 +3705,82 @@ def main():
                             take_talon()
 
                     # ----------------------------------------
+                    # Выбор карт для сноса
+                    # ----------------------------------------
+
+                    elif game_started and game_phase == "discard":
+
+                        hand = player_hands[0]
+
+                        same_suit_step = CARD_W
+                        new_suit_gap = 18
+
+                        total_width = 0
+
+                        for index, card in enumerate(hand):
+
+                            total_width += same_suit_step
+
+                            if (
+                                index > 0
+                                and card[1] != hand[index - 1][1]
+                            ):
+
+                                total_width += new_suit_gap
+
+                        total_width -= same_suit_step
+
+                        start_x = (
+                            WIDTH // 2
+                            - total_width // 2
+                            - 60
+                        )
+
+                        y = HEIGHT - CARD_H - 55
+
+                        current_x = start_x
+
+                        for index, card in enumerate(hand):
+
+                            if (
+                                index > 0
+                                and card[1] != hand[index - 1][1]
+                            ):
+
+                                current_x += new_suit_gap
+
+                            card_y = y
+
+                            if index in discard_selection:
+
+                                card_y -= 25
+
+                            rect = pygame.Rect(
+                                current_x,
+                                card_y,
+                                CARD_W,
+                                CARD_H
+                            )
+
+                            if rect.collidepoint(event.pos):
+
+                                if index in discard_selection:
+
+                                    discard_selection.remove(
+                                        index
+                                    )
+
+                                elif len(discard_selection) < 2:
+
+                                    discard_selection.append(
+                                        index
+                                    )
+
+                                break
+
+                            current_x += same_suit_step
+
+                    # ----------------------------------------
                     # Главное меню
                     # ----------------------------------------
 
@@ -3692,6 +3876,12 @@ def main():
 
             elif game_phase == "talon":
             	draw_talon_phase(screen)
+
+            elif game_phase == "discard":
+            	draw_discard_button(
+            		screen,
+            		mouse_pos
+            	)
 
         pygame.display.flip()
 
