@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.627
+# Преферанс — версия 0.628
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -1256,6 +1256,18 @@ def draw_player_action(surface):
 
 def draw_opponent_actions(surface):
 
+    whist_display_actions = {}
+
+    if (
+        game_phase in ("whist", "whist_done")
+        and declarer is not None
+    ):
+
+        whist_display_actions = {
+            (declarer + 1) % 3: whist_actions[0],
+            (declarer + 2) % 3: whist_actions[1]
+        }
+
     # Шрифт для обычного текста
     font = pygame.font.SysFont(
         "Georgia",
@@ -1272,9 +1284,20 @@ def draw_opponent_actions(surface):
     # Левый соперник
     # ----------------------------------------------------
 
-    if opponent_actions[0]:
+    if (
+        opponent_actions[0]
+        or (
+            1 in whist_display_actions
+            and whist_display_actions[1] != ""
+        )
+    ):
 
-        text = opponent_actions[0]
+        text = (
+            whist_display_actions[1]
+            if game_phase in ("whist", "whist_done")
+            and whist_display_actions[1] != ""
+            else opponent_actions[0]
+        )
 
         x = 190
         y = 250
@@ -1341,9 +1364,22 @@ def draw_opponent_actions(surface):
     # Правый соперник
     # ----------------------------------------------------
 
-    if opponent_actions[1]:
+    if (
+        opponent_actions[1]
+        or (
+            2 in whist_display_actions
+            and whist_display_actions[2] != ""
+        )
+    ):
 
-        text = opponent_actions[1]
+        text = (
+            whist_display_actions[2]
+            if (
+                2 in whist_display_actions
+                and whist_display_actions[2] != ""
+            )
+            else opponent_actions[1]
+        )
 
         x = WIDTH - 275
         y = 250
@@ -1726,7 +1762,10 @@ def draw_whist_phase(surface, mouse_pos):
 
     whist_button_rects = []
 
-    if game_phase != "whist":
+    if (
+        game_phase != "whist"
+        or whist_current_player != 0
+    ):
         return
 
     title_font = pygame.font.SysFont(
@@ -1933,35 +1972,36 @@ def get_available_bids(player):
 
     available = []
 
-    # --------------------------------------------------------
-    # Пас доступен всегда
-    # --------------------------------------------------------
-
-    available.append("Пас")
-
-    # --------------------------------------------------------
-    # Мизер можно объявить только первым заявлением
-    # этого игрока и только если он ещё не торговался
-    # --------------------------------------------------------
-
-    if player_bids[player] == "":
-
-        if highest_bid == "":
-
-            available.append("Мизер")
-
-    # --------------------------------------------------------
-    # Обычные игры
-    # --------------------------------------------------------
-
-    current_value = get_bid_value(highest_bid)
+    highest_value = get_bid_value(
+        highest_bid
+    )
 
     for bid in BID_OPTIONS:
 
-        if bid in ("Пас", "Мизер"):
+        if bid == "Пас":
+            available.append(bid)
             continue
 
-        if get_bid_value(bid) > current_value:
+        if bid == "Мизер":
+
+            if (
+                player_bids[player] == ""
+                and highest_bid == ""
+            ):
+
+                available.append(bid)
+
+            continue
+
+        if highest_bid == "Мизер":
+
+            if get_bid_value(bid) >= get_bid_value("9♠"):
+
+                available.append(bid)
+
+            continue
+
+        if get_bid_value(bid) > highest_value:
 
             available.append(bid)
 
@@ -3314,6 +3354,15 @@ def player_make_contract(contract):
 
     declarer_contract = contract
 
+    global whist_current_player
+    global whist_actions
+
+    whist_current_player = (
+        declarer + 1
+    ) % 3
+
+    whist_actions = ["", ""]
+
     game_phase = "whist"
 
 
@@ -4110,6 +4159,50 @@ def draw_interface(
 
     return play_rect, exit_rect
 
+def bot_make_whist():
+
+    global whist_current_player
+    global whist_actions
+    global whist_choice
+    global game_phase
+
+    if game_phase != "whist":
+        return
+
+    if whist_current_player == 0:
+        return
+
+    # --------------------------------------------------------
+    # Пока стратегия ИИ для виста ещё не реализована.
+    # Временно бот всегда выбирает ВИСТ.
+    # --------------------------------------------------------
+
+    action = "ВИСТ"
+
+    action_index = (
+        whist_current_player - declarer - 1
+    ) % 3
+
+    whist_actions[action_index] = action
+
+    whist_current_player = (
+        whist_current_player + 1
+    ) % 3
+
+    # --------------------------------------------------------
+    # Если оба соперника приняли решение —
+    # вист завершён.
+    # --------------------------------------------------------
+
+    if all(
+        action != ""
+        for action in whist_actions
+    ):
+
+        whist_choice = whist_actions[0]
+
+        game_phase = "whist_done"
+
 
 # ============================================================
 # ГЛАВНЫЙ ЦИКЛ
@@ -4120,6 +4213,7 @@ def main():
     global WIDTH, HEIGHT, screen
     global game_started
     global game_phase
+    global whist_current_player
 
     running = True
 
@@ -4214,9 +4308,26 @@ def main():
 
                             if rect.collidepoint(event.pos):
 
+                                action_index = (
+                                    whist_current_player
+                                    - declarer
+                                    - 1
+                                ) % 3
+
+                                whist_actions[action_index] = action
+
                                 whist_choice = action
 
-                                game_phase = "whist_done"
+                                whist_current_player = (
+                                    whist_current_player + 1
+                                ) % 3
+
+                                if all(
+                                    value != ""
+                                    for value in whist_actions
+                                ):
+
+                                    game_phase = "whist_done"
 
                                 break
 
@@ -4403,6 +4514,13 @@ def main():
 
             if bidding_active and current_bidder != 0:
             	bot_make_bid(current_bidder)
+
+            if (
+                game_phase == "whist"
+                and whist_current_player != 0
+            ):
+
+                bot_make_whist()
             draw_game_cards(screen)
             draw_opponent_actions(screen)
             draw_player_action(screen)
