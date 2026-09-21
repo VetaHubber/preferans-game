@@ -3631,6 +3631,7 @@ def main():
 
     global WIDTH, HEIGHT, screen
     global game_started
+    global game_phase
 
     running = True
 
@@ -3709,6 +3710,28 @@ def main():
                     # ----------------------------------------
 
                     elif game_started and game_phase == "discard":
+
+                        if (
+                            len(discard_selection) == 2
+                            and discard_button_rect is not None
+                            and discard_button_rect.collidepoint(
+                                event.pos
+                            )
+                        ):
+
+                            player_hands[0] = [
+                                card
+                                for index, card in enumerate(
+                                    player_hands[0]
+                                )
+                                if index not in discard_selection
+                            ]
+
+                            discard_selection.clear()
+
+                            game_phase = "discard_done"
+
+                            continue
 
                         hand = player_hands[0]
 
