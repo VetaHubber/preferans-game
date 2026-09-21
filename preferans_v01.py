@@ -2988,7 +2988,11 @@ def choose_bot_bid(
     reasonable = [
         item
         for item in evaluations
-        if item[1] >= 0.45
+        if (
+            item[1] >= 0.50
+            if item[0] == "Мизер"
+            else item[1] >= 0.45
+        )
     ]
 
     if not reasonable:
