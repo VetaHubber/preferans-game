@@ -1496,8 +1496,8 @@ def draw_game_cards(surface):
                 surface,
                 GREEN,
                 rect,
-                width=3,
-                border_radius=7
+                width=4,
+                border_radius=8
             )
 
         current_x += same_suit_step
