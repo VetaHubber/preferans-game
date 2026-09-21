@@ -157,6 +157,7 @@ declarer_contract = ""
 
 discard_selection = []
 discard_button_rect = None
+whist_button_rects = []
 
 talon_taken = False
 
@@ -1714,24 +1715,28 @@ def draw_discard_done(surface):
 # ВИСТ
 # ============================================================
 
-def draw_whist_phase(surface):
+def draw_whist_phase(surface, mouse_pos):
+
+    global whist_button_rects
+
+    whist_button_rects = []
 
     if game_phase != "whist":
         return
 
-    whist_font = pygame.font.SysFont(
+    title_font = pygame.font.SysFont(
         "Georgia",
         64,
         bold=True
     )
 
-    text_font = pygame.font.SysFont(
+    button_font = pygame.font.SysFont(
         "Georgia",
-        34,
+        42,
         bold=True
     )
 
-    title = whist_font.render(
+    title = title_font.render(
         "ВИСТ",
         True,
         GOLD
@@ -1742,13 +1747,86 @@ def draw_whist_phase(surface):
         title.get_rect(
             center=(
                 WIDTH // 2,
-                220
+                210
             )
         )
     )
 
-    text = text_font.render(
-        "Определяем вистующих...",
+    button_width = 280
+    button_height = 85
+    gap = 40
+
+    total_width = (
+        button_width * 2
+        + gap
+    )
+
+    start_x = (
+        WIDTH // 2
+        - total_width // 2
+    )
+
+    y = 360
+
+    buttons = [
+        ("ВИСТ", GREEN),
+        ("ПАС", RED)
+    ]
+
+    for index, (text, color) in enumerate(buttons):
+
+        rect = pygame.Rect(
+            start_x
+            + index * (button_width + gap),
+            y,
+            button_width,
+            button_height
+        )
+
+        hovered = rect.collidepoint(
+            mouse_pos
+        )
+
+        background = (
+            GOLD_DARK
+            if hovered
+            else WOOD_DARK
+        )
+
+        pygame.draw.rect(
+            surface,
+            background,
+            rect,
+            border_radius=10
+        )
+
+        pygame.draw.rect(
+            surface,
+            GOLD,
+            rect,
+            width=3,
+            border_radius=10
+        )
+
+        image = button_font.render(
+            text,
+            True,
+            color
+        )
+
+        surface.blit(
+            image,
+            image.get_rect(
+                center=rect.center
+            )
+        )
+
+        whist_button_rects.append(
+            (rect, text)
+        )
+
+    text = font.render(
+        "Выберите действие",
         True,
         IVORY
     )
@@ -1758,7 +1836,7 @@ def draw_whist_phase(surface):
         text.get_rect(
             center=(
                 WIDTH // 2,
-                290
+                500
             )
         )
     )
@@ -4023,7 +4101,10 @@ def main():
             	draw_discard_done(screen)
 
             elif game_phase == "whist":
-            	draw_whist_phase(screen)
+            	draw_whist_phase(
+            		screen,
+            		mouse_pos
+            	)
 
         pygame.display.flip()
 
