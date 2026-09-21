@@ -160,6 +160,13 @@ discard_button_rect = None
 
 talon_taken = False
 
+# ============================================================
+# СОСТОЯНИЕ ВИСТА
+# ============================================================
+
+whist_current_player = None
+whist_actions = ["", ""]
+
 # Прямоугольники кнопок торговли
 bid_buttons = []
 
@@ -1689,6 +1696,59 @@ def draw_discard_done(surface):
 
     text = text_font.render(
         "Ожидание вистующих...",
+        True,
+        IVORY
+    )
+
+    surface.blit(
+        text,
+        text.get_rect(
+            center=(
+                WIDTH // 2,
+                290
+            )
+        )
+    )
+
+# ============================================================
+# ВИСТ
+# ============================================================
+
+def draw_whist_phase(surface):
+
+    if game_phase != "whist":
+        return
+
+    whist_font = pygame.font.SysFont(
+        "Georgia",
+        64,
+        bold=True
+    )
+
+    text_font = pygame.font.SysFont(
+        "Georgia",
+        34,
+        bold=True
+    )
+
+    title = whist_font.render(
+        "ВИСТ",
+        True,
+        GOLD
+    )
+
+    surface.blit(
+        title,
+        title.get_rect(
+            center=(
+                WIDTH // 2,
+                220
+            )
+        )
+    )
+
+    text = text_font.render(
+        "Определяем вистующих...",
         True,
         IVORY
     )
@@ -3782,7 +3842,7 @@ def main():
 
                             discard_selection.clear()
 
-                            game_phase = "discard_done"
+                            game_phase = "whist"
 
                             continue
 
@@ -3961,6 +4021,9 @@ def main():
 
             elif game_phase == "discard_done":
             	draw_discard_done(screen)
+
+            elif game_phase == "whist":
+            	draw_whist_phase(screen)
 
         pygame.display.flip()
 
