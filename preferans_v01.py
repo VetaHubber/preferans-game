@@ -158,6 +158,7 @@ declarer_contract = ""
 discard_selection = []
 discard_button_rect = None
 whist_button_rects = []
+whist_choice = None
 
 talon_taken = False
 
@@ -1732,7 +1733,7 @@ def draw_whist_phase(surface, mouse_pos):
 
     button_font = pygame.font.SysFont(
         "Georgia",
-        82,
+        42,
         bold=True
     )
 
@@ -1753,12 +1754,12 @@ def draw_whist_phase(surface, mouse_pos):
     )
 
     button_width = 280
-    button_height = 85
-    gap = 40
+    button_height = 95
+    gap = 25
 
     total_width = (
-        button_width * 2
-        + gap
+        button_width * 3
+        + gap * 2
     )
 
     start_x = (
@@ -1770,6 +1771,7 @@ def draw_whist_phase(surface, mouse_pos):
 
     buttons = [
         ("ВИСТ", GREEN),
+        ("ПОЛВИСТА", GOLD_LIGHT),
         ("ПАС", RED)
     ]
 
@@ -1837,6 +1839,55 @@ def draw_whist_phase(surface, mouse_pos):
             center=(
                 WIDTH // 2,
                 500
+            )
+        )
+    )
+
+def draw_whist_done(surface):
+
+    if game_phase != "whist_done":
+        return
+
+    title_font = pygame.font.SysFont(
+        "Georgia",
+        64,
+        bold=True
+    )
+
+    text_font = pygame.font.SysFont(
+        "Georgia",
+        42,
+        bold=True
+    )
+
+    title = title_font.render(
+        "РЕШЕНИЕ ПРИНЯТО",
+        True,
+        GOLD
+    )
+
+    surface.blit(
+        title,
+        title.get_rect(
+            center=(
+                WIDTH // 2,
+                220
+            )
+        )
+    )
+
+    text = text_font.render(
+        whist_choice,
+        True,
+        IVORY
+    )
+
+    surface.blit(
+        text,
+        text.get_rect(
+            center=(
+                WIDTH // 2,
+                320
             )
         )
     )
@@ -3899,6 +3950,17 @@ def main():
                     # ----------------------------------------
                     # Выбор карт для сноса
                     # ----------------------------------------
+                    elif game_started and game_phase == "whist":
+
+                        for rect, action in whist_button_rects:
+
+                            if rect.collidepoint(event.pos):
+
+                                whist_choice = action
+
+                                game_phase = "whist_done"
+
+                                break
 
                     elif game_started and game_phase == "discard":
 
@@ -4105,6 +4167,9 @@ def main():
             		screen,
             		mouse_pos
             	)
+
+            elif game_phase == "whist_done":
+            	draw_whist_done(screen)
 
         pygame.display.flip()
 
