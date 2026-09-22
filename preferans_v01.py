@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.628
+# Преферанс — версия 0.629
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -168,6 +168,12 @@ talon_taken = False
 
 whist_current_player = None
 whist_actions = ["", ""]
+play_current_player = None
+trick_cards = []
+trick_lead_suit = None
+trick_winner = None
+trick_number = 0
+played_cards = []
 
 # Прямоугольники кнопок торговли
 bid_buttons = []
@@ -3365,6 +3371,38 @@ def player_make_contract(contract):
 
     game_phase = "whist"
 
+def start_play_phase():
+
+    global game_phase
+    global play_current_player
+    global trick_cards
+    global trick_lead_suit
+    global trick_winner
+    global trick_number
+    global played_cards
+
+    play_current_player = declarer
+
+    trick_cards = []
+
+    played_cards = []
+
+    trick_lead_suit = None
+
+    trick_winner = None
+
+    trick_number = 1
+
+    game_phase = "play"
+
+    print(
+        "РОЗЫГРЫШ: начало",
+        "| разыгрывающий:",
+        declarer,
+        "| контракт:",
+        declarer_contract
+    )
+
 
 def draw_talon_phase(surface):
 
@@ -4346,7 +4384,7 @@ def bot_make_whist():
 
         whist_choice = whist_actions[0]
 
-        game_phase = "whist_done"
+        start_play_phase()
 
 
 # ============================================================
@@ -4359,6 +4397,7 @@ def main():
     global game_started
     global game_phase
     global whist_current_player
+    global play_current_player
 
     running = True
 
@@ -4496,9 +4535,85 @@ def main():
                                     for value in whist_actions
                                 ):
 
-                                    game_phase = "whist_done"
+                                    start_play_phase()
 
                                 break
+
+                    elif game_started and game_phase == "play":
+
+                        if play_current_player == 0:
+
+                            hand = player_hands[0]
+
+                            same_suit_step = CARD_W
+                            new_suit_gap = 18
+
+                            total_width = 0
+
+                            for index, card in enumerate(hand):
+
+                                total_width += same_suit_step
+
+                                if (
+                                    index > 0
+                                    and card[1] != hand[index - 1][1]
+                                ):
+
+                                    total_width += new_suit_gap
+
+                            total_width -= same_suit_step
+
+                            start_x = (
+                                WIDTH // 2
+                                - total_width // 2
+                                - 60
+                            )
+
+                            y = HEIGHT - CARD_H - 55
+
+                            current_x = start_x
+
+                            for index, card in enumerate(hand):
+
+                                if (
+                                    index > 0
+                                    and card[1] != hand[index - 1][1]
+                                ):
+
+                                    current_x += new_suit_gap
+
+                                rect = pygame.Rect(
+                                    current_x,
+                                    y,
+                                    CARD_W,
+                                    CARD_H
+                                )
+
+                                if rect.collidepoint(event.pos):
+
+                                    print(
+                                        "РОЗЫГРЫШ: игрок 0 сыграл:",
+                                        card
+                                    )
+
+                                    trick_cards.append(
+                                        (0, card)
+                                    )
+
+                                    played_cards.append(
+                                        (0, card)
+                                    )
+
+                                    player_hands[0].remove(
+                                        card
+                                    )
+
+                                    play_current_player = 1
+
+                                    break
+
+                                current_x += same_suit_step
+
 
                     elif game_started and game_phase == "discard":
 
@@ -4694,6 +4809,59 @@ def main():
             draw_opponent_actions(screen)
             draw_player_action(screen)
             draw_players(screen)
+
+            # ------------------------------------------------
+            # Сыгранные карты на столе
+            # ------------------------------------------------
+
+            if game_phase == "play":
+
+                for player, card in played_cards:
+
+                    if player == 0:
+
+                        card_x = (
+                            WIDTH // 2
+                            - CARD_W // 2
+                        )
+
+                        card_y = (
+                            HEIGHT // 2
+                            - CARD_H // 2
+                        )
+
+                    elif player == 1:
+
+                        card_x = (
+                            WIDTH // 2
+                            - CARD_W // 2
+                            - 150
+                        )
+
+                        card_y = (
+                            HEIGHT // 2
+                            - CARD_H // 2
+                        )
+
+                    else:
+
+                        card_x = (
+                            WIDTH // 2
+                            - CARD_W // 2
+                            + 150
+                        )
+
+                        card_y = (
+                            HEIGHT // 2
+                            - CARD_H // 2
+                        )
+
+                    draw_card(
+                        screen,
+                        card,
+                        card_x,
+                        card_y
+                    )
 
             if (
                 game_phase == "bidding"
