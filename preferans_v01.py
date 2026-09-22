@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.630
+# Преферанс — версия 0.631
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -174,6 +174,12 @@ trick_lead_suit = None
 trick_winner = None
 trick_number = 0
 played_cards = []
+
+trick_pause = False
+trick_pause_start = 0
+
+trick_animation = False
+trick_animation_start = 0
 
 # Прямоугольники кнопок торговли
 bid_buttons = []
@@ -3439,6 +3445,8 @@ def start_play_phase():
     global trick_winner
     global trick_number
     global played_cards
+    global trick_pause
+    global trick_pause_start
 
     play_current_player = declarer
 
@@ -3461,6 +3469,92 @@ def start_play_phase():
         "| контракт:",
         declarer_contract
     )
+
+def determine_trick_winner():
+
+    if not trick_cards:
+        return None
+
+    rank_order = {
+        "7": 0,
+        "8": 1,
+        "9": 2,
+        "10": 3,
+        "В": 4,
+        "Д": 5,
+        "К": 6,
+        "Т": 7
+    }
+
+    # --------------------------------------------------------
+    # Определяем козырь
+    # --------------------------------------------------------
+
+    trump_suit = None
+
+    if declarer_contract not in ("", "Мизер"):
+
+        if not declarer_contract.endswith("БК"):
+
+            trump_suit = declarer_contract[-1]
+
+    # --------------------------------------------------------
+    # Победитель
+    # --------------------------------------------------------
+
+    winner_player, winner_card = trick_cards[0]
+
+    for player, card in trick_cards[1:]:
+
+        current_rank = rank_order[card[0]]
+        winner_rank = rank_order[winner_card[0]]
+
+        # ----------------------------------------------------
+        # Козырь бьёт некозырную карту
+        # ----------------------------------------------------
+
+        if trump_suit is not None:
+
+            if (
+                card[1] == trump_suit
+                and winner_card[1] != trump_suit
+            ):
+
+                winner_player = player
+                winner_card = card
+                continue
+
+            if (
+                card[1] != trump_suit
+                and winner_card[1] == trump_suit
+            ):
+
+                continue
+
+        # ----------------------------------------------------
+        # Карта другой масти не может побить
+        # ----------------------------------------------------
+
+        if card[1] != trick_lead_suit:
+
+            continue
+
+        if winner_card[1] != trick_lead_suit:
+
+            winner_player = player
+            winner_card = card
+            continue
+
+        # ----------------------------------------------------
+        # Старшая карта масти хода
+        # ----------------------------------------------------
+
+        if current_rank > winner_rank:
+
+            winner_player = player
+            winner_card = card
+
+    return winner_player
 
 def bot_make_play():
 
@@ -3526,6 +3620,26 @@ def bot_make_play():
     player_hands[player].remove(
         card
     )
+
+    if len(trick_cards) == 3:
+
+        global trick_winner
+        global trick_pause
+        global trick_pause_start
+
+        trick_winner = determine_trick_winner()
+
+        tricks_won[trick_winner] += 1
+
+        print(
+            "РОЗЫГРЫШ: взятку взял:",
+            trick_winner
+        )
+
+        trick_pause = True
+        trick_pause_start = pygame.time.get_ticks()
+
+        return
 
     play_current_player = (
         play_current_player + 1
@@ -4526,6 +4640,9 @@ def main():
     global whist_current_player
     global play_current_player
     global trick_lead_suit
+    global trick_winner
+    global trick_pause
+    global trick_pause_start
 
     running = True
 
@@ -4940,9 +5057,32 @@ def main():
             if (
                 game_phase == "play"
                 and play_current_player != 0
+                and not trick_pause
             ):
 
                 bot_make_play()
+            if trick_pause:
+
+                if (
+                    pygame.time.get_ticks()
+                    - trick_pause_start
+                    >= 1000
+                ):
+
+                    played_cards.clear()
+                    trick_cards.clear()
+
+                    play_current_player = trick_winner
+
+                    trick_lead_suit = None
+
+                    trick_pause = False
+                    trick_pause_start = 0
+
+                    print(
+                        "РОЗЫГРЫШ: следующий ход:",
+                        play_current_player
+                    )
             draw_game_cards(screen)
             draw_opponent_actions(screen)
             draw_player_action(screen)
