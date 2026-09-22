@@ -4065,6 +4065,371 @@ def bot_make_play():
         )
 
         # ----------------------------------------------------
+        # Оцениваем, кому достанется взятка
+        # и кто после неё будет ходить первым.
+        #
+        # Победитель текущей взятки автоматически
+        # становится первым ходящим в следующей.
+        # ----------------------------------------------------
+
+        if simulated_winner is not None:
+
+            if goal_state == "NEED_TRICKS":
+
+                if simulated_winner == player:
+
+                    # Для ИИ, которому нужны взятки,
+                    # собственный следующий ход полезен.
+                    score += 18
+
+                elif simulated_winner == declarer:
+
+                    # Декларант будет вести следующую взятку.
+                    score -= 12
+
+                else:
+
+                    # Другой защитник будет вести.
+                    score += 8
+
+            elif goal_state == "SAFE":
+
+                if simulated_winner == player:
+
+                    # Норма уже выполнена.
+                    # Лучше не получать право следующего хода.
+                    score -= 18
+
+                elif simulated_winner == declarer:
+
+                    # Декларант будет вести следующую взятку.
+                    score += 12
+
+                else:
+
+                    # Другой защитник будет вести.
+                    score += 6
+
+            elif goal_state == "AVOID_TRICKS":
+
+                if simulated_winner == player:
+
+                    # ПАС сам будет начинать следующую взятку.
+                    score -= 22
+
+                elif simulated_winner == declarer:
+
+                    # Декларант будет начинать следующую взятку.
+                    score += 14
+
+                else:
+
+                    # Другой защитник будет начинать.
+                    score += 7
+
+        # ----------------------------------------------------
+        # Если ПАС или SAFE вынужден начинать следующую
+        # взятку, оцениваем качество выхода.
+        #
+        # Нам особенно важны:
+        # 1. слабая карта;
+        # 2. короткая масть;
+        # 3. возможность быстро избавиться от масти;
+        # 4. вероятность, что следующий игрок сможет
+        #    перебить выход.
+        # ----------------------------------------------------
+
+        if (
+            simulated_winner == player
+            and goal_state in ("AVOID_TRICKS", "SAFE")
+        ):
+
+            exit_suit_count = sum(
+                1
+                for c in hand
+                if c[1] == card[1]
+            )
+
+            # Слабый выход безопаснее сильного.
+            score += (
+                35
+                - current_strength * 4
+            )
+
+            # Короткая масть особенно интересна.
+            if exit_suit_count == 1:
+
+                score += 18
+
+            elif exit_suit_count == 2:
+
+                score += 8
+
+            # Очень сильная карта нежелательна.
+            if current_strength >= 6:
+
+                score -= 12
+
+            # ------------------------------------------------
+            # Оцениваем вероятность того, что выход
+            # будет перебит следующим игроком.
+            #
+            # Чужие руки НЕ смотрим.
+            # ------------------------------------------------
+
+            rank_order = {
+                "7": 0,
+                "8": 1,
+                "9": 2,
+                "10": 3,
+                "В": 4,
+                "Д": 5,
+                "К": 6,
+                "Т": 7
+            }
+
+            suits = [
+                "♠",
+                "♣",
+                "♦",
+                "♥"
+            ]
+
+            ranks = [
+                "7",
+                "8",
+                "9",
+                "10",
+                "В",
+                "Д",
+                "К",
+                "Т"
+            ]
+
+            known_cards = set(
+                hand
+            )
+
+            for _, played_card in played_cards:
+
+                known_cards.add(
+                    played_card
+                )
+
+            known_cards.add(
+                card
+            )
+
+            unknown_cards = []
+
+            for suit_name in suits:
+
+                for rank_name in ranks:
+
+                    unknown_card = (
+                        rank_name,
+                        suit_name
+                    )
+
+                    if unknown_card not in known_cards:
+
+                        unknown_cards.append(
+                            unknown_card
+                        )
+
+            # ------------------------------------------------
+            # Оцениваем вероятность, что наш выход
+            # заберёт первый или третий игрок.
+            #
+            # Чужие реальные руки НЕ смотрим.
+            # Используем только неизвестные карты.
+            # ------------------------------------------------
+
+            next_player_can_win = 0
+
+            for unknown_card in unknown_cards:
+
+                can_win = False
+
+                # Старшая карта нашей масти.
+                if unknown_card[1] == card[1]:
+
+                    if (
+                        rank_order[
+                            unknown_card[0]
+                        ]
+                        >
+                        rank_order[
+                            card[0]
+                        ]
+                    ):
+
+                        can_win = True
+
+                # Козырь может перебить выход.
+                elif (
+                    trump is not None
+                    and unknown_card[1] == trump
+                    and card[1] != trump
+                ):
+
+                    can_win = True
+
+                if can_win:
+
+                    next_player_can_win += 1
+
+            if len(unknown_cards) > 0:
+
+                next_probability = (
+                    next_player_can_win
+                    / len(unknown_cards)
+                )
+
+            else:
+
+                next_probability = 0
+
+            # ------------------------------------------------
+            # Теперь учитываем третьего игрока.
+            #
+            # Если первая неизвестная карта НЕ может
+            # перебить наш выход, вторая неизвестная карта
+            # получает такую возможность.
+            # ------------------------------------------------
+
+            third_player_can_win = 0
+
+            third_player_total = 0
+
+            for first_card in unknown_cards:
+
+                first_can_win = False
+
+                if first_card[1] == card[1]:
+
+                    if (
+                        rank_order[
+                            first_card[0]
+                        ]
+                        >
+                        rank_order[
+                            card[0]
+                        ]
+                    ):
+
+                        first_can_win = True
+
+                elif (
+                    trump is not None
+                    and first_card[1] == trump
+                    and card[1] != trump
+                ):
+
+                    first_can_win = True
+
+                # Первый игрок уже забирает взятку.
+                # До третьего игрока дело не доходит.
+                if first_can_win:
+
+                    continue
+
+                for second_card in unknown_cards:
+
+                    if second_card == first_card:
+                        continue
+
+                    third_player_total += 1
+
+                    second_can_win = False
+
+                    if second_card[1] == card[1]:
+
+                        if (
+                            rank_order[
+                                second_card[0]
+                            ]
+                            >
+                            rank_order[
+                                card[0]
+                            ]
+                        ):
+
+                            second_can_win = True
+
+                    elif (
+                        trump is not None
+                        and second_card[1] == trump
+                        and card[1] != trump
+                    ):
+
+                        second_can_win = True
+
+                    if second_can_win:
+
+                        third_player_can_win += 1
+
+            if third_player_total > 0:
+
+                third_probability = (
+                    third_player_can_win
+                    / third_player_total
+                )
+
+            else:
+
+                third_probability = 0
+
+            # ------------------------------------------------
+            # Общая вероятность избавиться от взятки:
+            #
+            # первый игрок перебивает
+            # ИЛИ
+            # первый не перебивает, но перебивает третий.
+            # ------------------------------------------------
+
+            escape_probability = (
+                next_probability
+                + (
+                    (1 - next_probability)
+                    * third_probability
+                )
+            )
+
+            # ------------------------------------------------
+            # Для ПАСА особенно выгоден выход,
+            # который с большой вероятностью заберёт
+            # другой игрок.
+            # ------------------------------------------------
+
+            if goal_state == "AVOID_TRICKS":
+
+                score += int(
+                    escape_probability * 80
+                )
+
+            elif goal_state == "SAFE":
+
+                score += int(
+                    escape_probability * 55
+                )
+
+            # ------------------------------------------------
+            # Если выход почти наверняка останется
+            # у самого ИИ, это плохой выход.
+            # ------------------------------------------------
+
+            if escape_probability < 0.20:
+
+                if goal_state == "AVOID_TRICKS":
+
+                    score -= 30
+
+                elif goal_state == "SAFE":
+
+                    score -= 20
+
+        # ----------------------------------------------------
         # Взятки нужны
         # ----------------------------------------------------
 
@@ -4157,42 +4522,96 @@ def bot_make_play():
 
         elif goal_state == "AVOID_TRICKS":
 
-            if wins_now:
+            # Чем больше взяток уже набрал ИИ,
+            # тем сильнее он старается не получать следующую.
+            current_tricks = tricks_won[player]
 
-                # Сам бот забирает взятку.
-                score -= 120
+            # ------------------------------------------------
+            # Базовый штраф за собственную взятку.
+            #
+            # Важен не только сам факт взятки,
+            # но и её место в уже набранном количестве.
+            # ------------------------------------------------
 
-                score += (
-                    future * 2
+            if simulated_winner == player:
+
+                score -= (
+                    120
+                    + current_tricks * 35
                 )
 
-            else:
+                if current_tricks >= 1:
 
-                # ------------------------------------------------
-                # Важен не только факт, что бот НЕ берёт взятку,
-                # но и то, кому она достанется.
-                # ------------------------------------------------
+                    score -= (
+                        current_tricks
+                        * (current_tricks + 3)
+                        * 5
+                    )
 
-                if simulated_winner == declarer:
+            # ------------------------------------------------
+            # Если взятку получает другой игрок,
+            # оцениваем распределение взяток.
+            # ------------------------------------------------
 
-                    # Для пасующего это плохой результат:
-                    # взятку получает декларант.
-                    score -= 45
+            elif (
+                simulated_winner is not None
+                and simulated_winner != player
+            ):
 
-                elif (
-                    simulated_winner is not None
-                    and simulated_winner != player
-                ):
+                winner_tricks = (
+                    tricks_won[simulated_winner]
+                )
 
-                    # Взятку получает другой противник
-                    # декларанта — это обычно выгоднее.
-                    score += 30
+                trick_difference = (
+                    winner_tricks
+                    - current_tricks
+                )
 
+                # Другой игрок уже имеет больше взяток.
+                # Отдать ему следующую обычно разумно:
+                # распределение становится ближе к равному.
+                if trick_difference > 0:
+
+                    score += min(
+                        trick_difference * 14,
+                        42
+                    )
+
+                # Равное количество взяток —
+                # хороший вариант распределения.
+                elif trick_difference == 0:
+
+                    score += 24
+
+                # Другой игрок отстаёт.
+                # Помогать ему набирать ещё взятки
+                # уже нежелательно.
                 else:
 
-                    # Если победитель почему-то не определён,
-                    # сохраняем обычную оценку безопасного сброса.
-                    score += 10
+                    score -= min(
+                        abs(trick_difference) * 14,
+                        42
+                    )
+
+            # ------------------------------------------------
+            # Взятка декларанту особенно нежелательна:
+            # пасующий не хочет помогать разыгрывающему.
+            # ------------------------------------------------
+
+            if simulated_winner == declarer:
+
+                score -= 45
+
+                score -= (
+                    current_tricks * 10
+                )
+
+            # ------------------------------------------------
+            # Если ИИ НЕ получает текущую взятку,
+            # карта в целом безопасна.
+            # ------------------------------------------------
+
+            if simulated_winner != player:
 
                 score += 50
 
@@ -4200,6 +4619,165 @@ def bot_make_play():
 
                 score -= (
                     current_strength * 3
+                )
+
+            # ------------------------------------------------
+            # ДВУХШАГОВЫЙ ПРОГНОЗ
+            #
+            # Если текущая карта приводит к нашей взятке,
+            # следующий ход снова будет нашим.
+            #
+            # Поэтому смотрим на оставшиеся карты и ищем
+            # наиболее безопасный следующий выход.
+            # ------------------------------------------------
+
+            if simulated_winner == player:
+
+                best_next_escape = 0
+
+                for next_card in hand:
+
+                    if next_card == card:
+                        continue
+
+                    next_escape = 0
+
+                    for unknown_card in unknown_cards:
+
+                        next_can_win = False
+
+                        # Карта той же масти старше
+                        # нашего следующего выхода.
+                        if unknown_card[1] == next_card[1]:
+
+                            if (
+                                rank_order[
+                                    unknown_card[0]
+                                ]
+                                >
+                                rank_order[
+                                    next_card[0]
+                                ]
+                            ):
+
+                                next_can_win = True
+
+                        # Козырь перебивает обычную масть.
+                        elif (
+                            trump is not None
+                            and unknown_card[1] == trump
+                            and next_card[1] != trump
+                        ):
+
+                            next_can_win = True
+
+                        if next_can_win:
+
+                            next_escape += 1
+
+                    if len(unknown_cards) > 0:
+
+                        next_escape_probability = (
+                            next_escape
+                            / len(unknown_cards)
+                        )
+
+                    else:
+
+                        next_escape_probability = 0
+
+                    if (
+                        next_escape_probability
+                        >
+                        best_next_escape
+                    ):
+
+                        best_next_escape = (
+                            next_escape_probability
+                        )
+
+                # ------------------------------------------------
+                # Теперь знаем, насколько реально ИИ сможет
+                # избавиться от следующей взятки.
+                # ------------------------------------------------
+
+                if best_next_escape >= 0.70:
+
+                    score += 25
+
+                elif best_next_escape >= 0.50:
+
+                    score += 5
+
+                elif best_next_escape >= 0.35:
+
+                    score -= 20
+
+                elif best_next_escape >= 0.20:
+
+                    score -= 45
+
+                else:
+
+                    score -= 70
+
+                # ------------------------------------------------
+                # После двух взяток особенно важно не получать
+                # третью, если следующий выход тоже опасный.
+                # ------------------------------------------------
+
+                if current_tricks >= 2:
+
+                    if best_next_escape < 0.50:
+
+                        score -= 30
+
+                # ------------------------------------------------
+                # После трёх взяток цена следующей ещё выше.
+                # ------------------------------------------------
+
+                if current_tricks >= 3:
+
+                    if best_next_escape < 0.60:
+
+                        score -= 40
+
+            # ------------------------------------------------
+            # Если ИИ уже набрал много взяток,
+            # дополнительно усиливаем желание от них уйти.
+            # ------------------------------------------------
+
+            if current_tricks >= 2:
+
+                if simulated_winner == player:
+
+                    score -= (
+                        current_tricks * 15
+                    )
+
+                elif (
+                    simulated_winner is not None
+                    and simulated_winner != player
+                ):
+
+                    score += 5
+
+            if current_tricks >= 3:
+
+                if simulated_winner == player:
+
+                    score -= 30
+
+            # ------------------------------------------------
+            # Если текущая карта слабая и безопасная,
+            # небольшое преимущество отдаём именно ей.
+            # ------------------------------------------------
+
+            if simulated_winner != player:
+
+                score += (
+                    20
+                    - current_strength * 2
                 )
 
         # ----------------------------------------------------
