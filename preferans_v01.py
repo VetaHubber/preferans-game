@@ -191,6 +191,8 @@ bid_buttons = []
 bot_thinking = False
 bot_result = None
 bot_result_player = None
+bot_result_probability = None
+bot_previous_probability = [None, None, None]
 
 def start_bidding():
 
@@ -3031,7 +3033,7 @@ def choose_bot_bid(
 
     if len(available_bids) == 1:
 
-        return "Пас"
+        return "Пас", None
 
     # --------------------------------------------------------
     # Проверяем каждую доступную заявку
@@ -3064,7 +3066,7 @@ def choose_bot_bid(
 
     if not evaluations:
 
-        return "Пас"
+        return "Пас", None
 
     # --------------------------------------------------------
     # Для отладки пока показываем,
@@ -3090,28 +3092,96 @@ def choose_bot_bid(
         )
 
     # --------------------------------------------------------
-    # Выбираем заявку.
-    #
-    # Сначала рассматриваем только те,
-    # где вероятность выполнения не меньше 55%.
+    # Проверяем, была ли у ИИ собственная заявка,
+    # которую соперник только что перебил.
     # --------------------------------------------------------
 
-    reasonable = [
-        item
-        for item in evaluations
-        if (
-            item[1] >= 0.50
-            if item[0] == "Мизер"
-            else item[1] >= 0.45
+    previous_bid = None
+
+    for history_player, history_bid in reversed(history):
+
+        if history_player == player:
+
+            if history_bid != "Пас":
+
+                previous_bid = history_bid
+
+            break
+
+    # --------------------------------------------------------
+    # Получаем СОХРАНЁННУЮ вероятность предыдущей заявки.
+    #
+    # Повторно её не рассчитываем.
+    # --------------------------------------------------------
+
+    previous_probability = None
+
+    if previous_bid is not None:
+
+        previous_probability = (
+            bot_previous_probability[player]
         )
-    ]
+
+        print(
+            "ИИ:",
+            player,
+            "| предыдущая заявка:",
+            previous_bid,
+            "| сохранённый успех:",
+            round(previous_probability * 100, 1)
+            if previous_probability is not None
+            else "нет данных"
+        )
+
+    # --------------------------------------------------------
+    # Проверяем, была ли предыдущая заявка достаточно сильной.
+    # --------------------------------------------------------
+
+    defend_previous_bid = (
+        previous_probability is not None
+        and previous_probability >= 0.50
+    )
+
+    # --------------------------------------------------------
+    # Выбираем заявку.
+    #
+    # В обычной ситуации вероятность должна быть
+    # не меньше 45%.
+    #
+    # Если ИИ уже сам сделал сильную заявку,
+    # но его перебили, разрешаем ему рискнуть.
+    # --------------------------------------------------------
+
+    if defend_previous_bid:
+
+        reasonable = [
+            item
+            for item in evaluations
+            if (
+                item[1] >= 0.20
+                if item[0] != "Мизер"
+                else item[1] >= 0.50
+            )
+        ]
+
+    else:
+
+        reasonable = [
+            item
+            for item in evaluations
+            if (
+                item[1] >= 0.50
+                if item[0] == "Мизер"
+                else item[1] >= 0.45
+            )
+        ]
 
     if not reasonable:
 
-        return "Пас"
+        return "Пас", None
 
     # --------------------------------------------------------
-    # Из достаточно надёжных заявок выбираем
+    # Из достаточно подходящих заявок выбираем
     # самую высокую по торговле.
     # --------------------------------------------------------
 
@@ -3119,7 +3189,12 @@ def choose_bot_bid(
         key=lambda item: get_bid_value(item[0])
     )
 
-    return reasonable[-1][0]
+    selected_bid = reasonable[-1]
+
+    return (
+        selected_bid[0],
+        selected_bid[1]
+    )
 
 def bot_ai_worker(
     player,
@@ -3130,6 +3205,7 @@ def bot_ai_worker(
 
     global bot_result
     global bot_result_player
+    global bot_result_probability
 
     # --------------------------------------------------------
     # ИИ работает только с копией руки.
@@ -3137,13 +3213,14 @@ def bot_ai_worker(
     # Pygame и состояние игры здесь не используются.
     # --------------------------------------------------------
 
-    result = choose_bot_bid(
+    result, probability = choose_bot_bid(
         player,
         available_bids,
         history
     )
 
     bot_result = result
+    bot_result_probability = probability
     bot_result_player = player
 
 
@@ -3160,6 +3237,8 @@ def bot_make_bid(player):
     global bot_thinking
     global bot_result
     global bot_result_player
+    global bot_result_probability
+    global bot_previous_probability
 
     # --------------------------------------------------------
     # Если ИИ уже думает — ничего больше не запускаем.
@@ -3184,8 +3263,10 @@ def bot_make_bid(player):
         # ----------------------------------------------------
 
         bid = bot_result
+        probability = bot_result_probability
 
         bot_result = None
+        bot_result_probability = None
         bot_result_player = None
         bot_thinking = False
 
@@ -3194,6 +3275,10 @@ def bot_make_bid(player):
         # ----------------------------------------------------
 
         player_bids[player] = bid
+        
+        if bid != "Пас":
+
+            bot_previous_probability[player] = probability
 
         bid_history.append(
             (player, bid)
@@ -4575,6 +4660,15 @@ def bot_make_whist():
 
             threshold = 5
 
+        print(
+            "ВИСТ: ИИ",
+            player,
+            "| score:",
+            score,
+            "| threshold:",
+            threshold
+        )
+
         if score >= threshold:
 
             action = "ВИСТ"
@@ -4647,6 +4741,7 @@ def main():
     global trick_winner
     global trick_pause
     global trick_pause_start
+    global trick_number
 
     running = True
 
@@ -5111,17 +5206,29 @@ def main():
                     played_cards.clear()
                     trick_cards.clear()
 
-                    play_current_player = trick_winner
-
                     trick_lead_suit = None
 
                     trick_pause = False
                     trick_pause_start = 0
 
-                    print(
-                        "РОЗЫГРЫШ: следующий ход:",
-                        play_current_player
-                    )
+                    if trick_number == 10:
+
+                        game_phase = "result"
+
+                        print(
+                            "РОЗЫГРЫШ: все 10 взяток сыграны"
+                        )
+
+                    else:
+
+                        trick_number += 1
+
+                        play_current_player = trick_winner
+
+                        print(
+                            "РОЗЫГРЫШ: следующий ход:",
+                            play_current_player
+                        )
             draw_game_cards(screen)
             draw_opponent_actions(screen)
             draw_player_action(screen)
