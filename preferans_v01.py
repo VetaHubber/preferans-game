@@ -4172,31 +4172,176 @@ def bot_make_whist():
     if whist_current_player == 0:
         return
 
+    player = whist_current_player
+
+    print(
+        "ВИСТ: ход ИИ",
+        player,
+        "| контракт:",
+        declarer_contract,
+        "| предыдущие решения:",
+        whist_actions
+    )
+
+    hand = player_hands[player]
+
+    suit, level = get_bid_contract(
+        declarer_contract
+    )
+    print(
+        "ВИСТ: ИИ",
+        player,
+        "| масть:",
+        suit,
+        "| уровень:",
+        level
+    )
+
     # --------------------------------------------------------
-    # Пока стратегия ИИ для виста ещё не реализована.
-    # Временно бот всегда выбирает ВИСТ.
+    # Мизер — особый контракт.
+    # Пока не вистуем против мизера.
     # --------------------------------------------------------
 
-    action = "ВИСТ"
+    if suit == "Мизер":
+
+        action = "ПАС"
+
+    else:
+
+        trump = (
+            None
+            if suit == "БК"
+            else suit
+        )
+
+        score = 0
+
+        # ----------------------------------------------------
+        # Старшие карты
+        # ----------------------------------------------------
+
+        for rank, card_suit in hand:
+
+            value = card_strength(rank)
+
+            if rank == "Т":
+
+                score += 4
+
+            elif rank == "К":
+
+                score += 2
+
+            elif rank == "Д":
+
+                score += 1
+
+            elif rank == "В":
+
+                score += 0.5
+
+            # Козырные карты ценнее
+            if (
+                trump is not None
+                and card_suit == trump
+            ):
+
+                score += value * 0.8
+
+        # ----------------------------------------------------
+        # Длина козыря
+        # ----------------------------------------------------
+
+        if trump is not None:
+
+            trump_count = sum(
+                1
+                for rank, card_suit in hand
+                if card_suit == trump
+            )
+
+            if trump_count >= 5:
+
+                score += 4
+
+            elif trump_count == 4:
+
+                score += 2
+
+            elif trump_count == 3:
+
+                score += 1
+
+        # ----------------------------------------------------
+        # Чем выше контракт, тем сложнее вистовать.
+        # ----------------------------------------------------
+
+        if level == 6:
+
+            threshold = 11
+
+        elif level == 7:
+
+            threshold = 9
+
+        elif level == 8:
+
+            threshold = 7
+
+        else:
+
+            threshold = 5
+
+        if score >= threshold:
+
+            action = "ВИСТ"
+
+        else:
+
+            action = "ПАС"
+
+        # ----------------------------------------------------
+        # Полвиста.
+        # Если первый вистующий спасовал,
+        # второй может выбрать полвиста для 6 или 7.
+        # ----------------------------------------------------
+
+        first_action = whist_actions[0]
+
+        if (
+            first_action == "ПАС"
+            and level in (6, 7)
+            and action == "ВИСТ"
+        ):
+
+            action = "ПОЛВИСТА"
 
     action_index = (
-        whist_current_player - declarer - 1
+        whist_current_player
+        - declarer
+        - 1
     ) % 3
 
+    print(
+        "ВИСТ: ИИ",
+        player,
+        "| выбрал:",
+        action,
+        "| индекс:",
+        action_index
+    )
+
     whist_actions[action_index] = action
+
+    whist_choice = action
 
     whist_current_player = (
         whist_current_player + 1
     ) % 3
 
-    # --------------------------------------------------------
-    # Если оба соперника приняли решение —
-    # вист завершён.
-    # --------------------------------------------------------
-
     if all(
-        action != ""
-        for action in whist_actions
+        value != ""
+        for value in whist_actions
     ):
 
         whist_choice = whist_actions[0]
@@ -4314,7 +4459,31 @@ def main():
                                     - 1
                                 ) % 3
 
+                                print(
+                                    "ВИСТ: игрок 0 | выбрал:",
+                                    action,
+                                    "| индекс:",
+                                    action_index
+                                )
+
                                 whist_actions[action_index] = action
+
+                                whist_choice = action
+
+                                whist_actions[action_index] = action
+                                print(
+                                    "ВИСТ: игрок 0 выбрал:",
+                                    action,
+                                    "| все решения:",
+                                    whist_actions
+                                )
+
+                                print(
+                                    "ВИСТ: игрок 0 выбрал:",
+                                    action,
+                                    "| все решения:",
+                                    whist_actions
+                                )
 
                                 whist_choice = action
 
