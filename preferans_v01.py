@@ -1172,15 +1172,31 @@ def draw_player_action(surface):
         else player_bids[0]
     )
 
-    action_font = pygame.font.SysFont(
-        "Georgia",
-        64
-    )
+    if game_phase == "play":
 
-    suit_font = pygame.font.SysFont(
-        "DejaVu Sans",
-        86
-    )
+        action_font = pygame.font.SysFont(
+            "Georgia",
+            40,
+            bold=True
+        )
+
+        suit_font = pygame.font.SysFont(
+            "DejaVu Sans",
+            52,
+            bold=True
+        )
+
+    else:
+
+        action_font = pygame.font.SysFont(
+            "Georgia",
+            64
+        )
+
+        suit_font = pygame.font.SysFont(
+            "DejaVu Sans",
+            86
+        )
 
     suit_colors = {
         "♠": BLACK,
@@ -1216,17 +1232,27 @@ def draw_player_action(surface):
         for image in parts
     )
 
-    x = WIDTH // 2 - total_width // 2
-    y = HEIGHT - CARD_H - 165
+    if game_phase == "play":
 
-    padding_x = 20
-    padding_y = 8
+        x = WIDTH // 2 - total_width // 2
+        y = HEIGHT - CARD_H - 115
+
+        padding_x = 10
+        padding_y = 4
+
+    else:
+
+        x = WIDTH // 2 - total_width // 2
+        y = HEIGHT - CARD_H - 165
+
+        padding_x = 20
+        padding_y = 8
 
     background_rect = pygame.Rect(
         x - padding_x,
         y - padding_y,
         total_width + padding_x * 2,
-        100
+        55 if game_phase == "play" else 100
     )
 
     pygame.draw.rect(
@@ -3403,6 +3429,47 @@ def start_play_phase():
         declarer_contract
     )
 
+def bot_make_play():
+
+    global play_current_player
+    global trick_cards
+    global played_cards
+
+    if game_phase != "play":
+        return
+
+    if play_current_player == 0:
+        return
+
+    player = play_current_player
+
+    if not player_hands[player]:
+        return
+
+    card = player_hands[player][0]
+
+    print(
+        "РОЗЫГРЫШ: ИИ",
+        player,
+        "сыграл:",
+        card
+    )
+
+    trick_cards.append(
+        (player, card)
+    )
+
+    played_cards.append(
+        (player, card)
+    )
+
+    player_hands[player].remove(
+        card
+    )
+
+    play_current_player = (
+        play_current_player + 1
+    ) % 3
 
 def draw_talon_phase(surface):
 
@@ -4805,6 +4872,12 @@ def main():
             ):
 
                 bot_make_whist()
+            if (
+                game_phase == "play"
+                and play_current_player != 0
+            ):
+
+                bot_make_play()
             draw_game_cards(screen)
             draw_opponent_actions(screen)
             draw_player_action(screen)
@@ -4841,6 +4914,7 @@ def main():
                         card_y = (
                             HEIGHT // 2
                             - CARD_H // 2
+                            - 80
                         )
 
                     else:
@@ -4854,13 +4928,21 @@ def main():
                         card_y = (
                             HEIGHT // 2
                             - CARD_H // 2
+                            - 80
                         )
 
-                    draw_card(
-                        screen,
-                        card,
+                    card_rect = pygame.Rect(
                         card_x,
-                        card_y
+                        card_y,
+                        CARD_W,
+                        CARD_H
+                    )
+
+                    draw_card_face(
+                        screen,
+                        card_rect,
+                        card[0],
+                        card[1]
                     )
 
             if (
