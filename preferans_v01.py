@@ -1215,7 +1215,10 @@ def draw_player_action(surface):
 
     text = (
         declarer_contract
-        if game_phase in ("whist", "whist_done", "play")
+        if (
+            game_phase in ("whist", "whist_done", "play")
+            and declarer == 0
+        )
         else player_bids[0]
     )
 
@@ -3198,7 +3201,16 @@ def choose_bot_bid(
             if (
                 item[1] >= 0.50
                 if item[0] == "Мизер"
-                else item[1] >= 0.45
+                else (
+                    item[1] >= 0.45
+                    or (
+                        estimate_bid_confidence(
+                            hand,
+                            item[0]
+                        ) >= 15
+                        and item[1] >= 0.30
+                    )
+                )
             )
         ]
 
@@ -5100,17 +5112,14 @@ def take_talon():
     if game_phase != "talon":
         return
 
-    if declarer != 0:
-        return
-
     if talon_taken:
         return
 
     # --------------------------------------------------------
-    # Забираем обе карты прикупа в нашу руку.
+    # Забираем обе карты прикупа в руку декларанта.
     # --------------------------------------------------------
 
-    player_hands[0].extend(talon)
+    player_hands[declarer].extend(talon)
 
     # --------------------------------------------------------
     # Сортируем руку.
@@ -5134,7 +5143,7 @@ def take_talon():
         "Т": 7
     }
 
-    player_hands[0].sort(
+    player_hands[declarer].sort(
         key=lambda card: (
             suit_order[card[1]],
             rank_order[card[0]]
@@ -5154,6 +5163,238 @@ def take_talon():
     # --------------------------------------------------------
 
     game_phase = "discard"
+
+def bot_make_discard():
+
+    global game_phase
+    global player_hands
+    global discard_selection
+
+    if game_phase != "discard":
+        return
+
+    if declarer == 0:
+        return
+
+    if declarer is None:
+        return
+
+    hand = player_hands[declarer]
+
+    if len(hand) != 12:
+        return
+
+    # --------------------------------------------------------
+    # Определяем контракт и козырь.
+    # --------------------------------------------------------
+
+    suit, level = get_bid_contract(
+        declarer_contract
+    )
+
+    trump = None
+
+    if suit not in ("БК", "Мизер"):
+        trump = suit
+
+    # --------------------------------------------------------
+    # Количество карт каждой масти.
+    # --------------------------------------------------------
+
+    suit_counts = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    for card in hand:
+        suit_counts[card[1]] += 1
+
+    # --------------------------------------------------------
+    # Оцениваем карту именно с точки зрения сноса.
+    #
+    # Чем выше score —
+    # тем больше карта подходит для сноса.
+    # --------------------------------------------------------
+
+    discard_scores = []
+
+    for card in hand:
+
+        rank = card[0]
+        card_suit = card[1]
+
+        strength = card_strength(rank)
+
+        score = 0
+
+        # ----------------------------------------------------
+        # Мизер.
+        #
+        # Здесь сильные карты опасны,
+        # поэтому их наоборот хочется убрать.
+        # ----------------------------------------------------
+
+        if suit == "Мизер":
+
+            score += strength * 12
+
+            if rank == "Т":
+                score += 20
+
+            elif rank == "К":
+                score += 14
+
+            elif rank == "Д":
+                score += 8
+
+            # Одиночная сильная карта особенно неудобна.
+            if suit_counts[card_suit] == 1:
+                score += 8
+
+        # ----------------------------------------------------
+        # Обычный контракт с козырем.
+        # ----------------------------------------------------
+
+        elif trump is not None:
+
+            # Козыри стараемся сохранять.
+            if card_suit == trump:
+
+                score -= 40
+
+                if rank == "Т":
+                    score -= 25
+
+                elif rank == "К":
+                    score -= 18
+
+                elif rank == "Д":
+                    score -= 10
+
+            else:
+
+                # Слабые боковые карты —
+                # основные кандидаты на снос.
+                score += (
+                    28
+                    - strength * 5
+                )
+
+                # Одиночная боковая масть может быть
+                # очень полезна для последующего
+                # сокращения масти.
+                if suit_counts[card_suit] == 1:
+
+                    score += 10
+
+                # Старшие карты сохраняем.
+                if rank == "Т":
+                    score -= 20
+
+                elif rank == "К":
+                    score -= 12
+
+                elif rank == "Д":
+                    score -= 6
+
+        # ----------------------------------------------------
+        # Бескозырка.
+        # ----------------------------------------------------
+
+        else:
+
+            score += (
+                28
+                - strength * 5
+            )
+
+            if rank == "Т":
+                score -= 20
+
+            elif rank == "К":
+                score -= 12
+
+            elif rank == "Д":
+                score -= 6
+
+            if suit_counts[card_suit] == 1:
+                score += 6
+
+        discard_scores.append(
+            (score, card)
+        )
+
+    # --------------------------------------------------------
+    # Сортируем от наиболее подходящей для сноса
+    # карты к наименее подходящей.
+    # --------------------------------------------------------
+
+    discard_scores.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    selected_cards = [
+        discard_scores[0][1],
+        discard_scores[1][1]
+    ]
+
+    # --------------------------------------------------------
+    # Находим индексы этих карт в текущей руке.
+    # --------------------------------------------------------
+
+    discard_selection = []
+
+    for index, card in enumerate(hand):
+
+        if card in selected_cards:
+
+            discard_selection.append(
+                index
+            )
+
+            if len(discard_selection) == 2:
+                break
+
+    # --------------------------------------------------------
+    # Сносим карты.
+    # --------------------------------------------------------
+
+    discarded_cards = [
+        hand[index]
+        for index in discard_selection
+    ]
+
+    player_hands[declarer] = [
+        card
+        for index, card in enumerate(hand)
+        if index not in discard_selection
+    ]
+
+    discard_selection.clear()
+
+    print(
+        "СНОС ИИ:",
+        declarer,
+        "| контракт:",
+        declarer_contract,
+        "| снес:",
+        discarded_cards
+    )
+
+    # --------------------------------------------------------
+    # Следующий этап.
+    # --------------------------------------------------------
+
+    if declarer_contract == "Мизер":
+
+        game_phase = "whist"
+
+    else:
+
+        game_phase = "contract"
 
 def draw_bidding_window(surface, mouse_pos):
 
@@ -5795,6 +6036,126 @@ def draw_interface(
     )
 
     return play_rect, exit_rect
+
+def bot_make_contract():
+
+    global declarer_contract
+    global game_phase
+    global whist_current_player
+    global whist_actions
+
+    if game_phase != "contract":
+        return
+
+    if declarer == 0:
+        return
+
+    if declarer is None:
+        return
+
+    hand = player_hands[declarer]
+
+    if len(hand) != 10:
+        return
+
+    available_contracts = get_available_contracts()
+
+    if not available_contracts:
+        return
+
+    # --------------------------------------------------------
+    # Оцениваем доступные контракты уже по настоящей
+    # руке после получения прикупа и сноса.
+    # --------------------------------------------------------
+
+    evaluations = []
+
+    for contract in available_contracts:
+
+        confidence = analyze_hand_for_contract(
+            hand,
+            contract
+        )
+
+        evaluations.append(
+            (
+                contract,
+                confidence
+            )
+        )
+
+    # --------------------------------------------------------
+    # Показываем для отладки, что выбрал ИИ.
+    # --------------------------------------------------------
+
+    print(
+        "КОНТРАКТ ИИ:",
+        declarer,
+        "| рука:",
+        hand
+    )
+
+    for contract, confidence in evaluations:
+
+        print(
+            contract,
+            "| уверенность:",
+            round(confidence, 1)
+        )
+
+    # --------------------------------------------------------
+    # Ищем наиболее высокий контракт,
+    # который ИИ считает подходящим.
+    # --------------------------------------------------------
+
+    reasonable = [
+        item
+        for item in evaluations
+        if item[1] >= 0
+    ]
+
+    if reasonable:
+
+        reasonable.sort(
+            key=lambda item: get_bid_value(
+                item[0]
+            )
+        )
+
+        selected_contract = reasonable[-1][0]
+
+    else:
+
+        # Если рука ничего уверенно не тянет,
+        # берём минимально допустимый контракт.
+        evaluations.sort(
+            key=lambda item: get_bid_value(
+                item[0]
+            )
+        )
+
+        selected_contract = evaluations[0][0]
+
+    declarer_contract = selected_contract
+
+    print(
+        "КОНТРАКТ ИИ:",
+        declarer,
+        "| выбрал:",
+        declarer_contract
+    )
+
+    # --------------------------------------------------------
+    # Переходим к висту.
+    # --------------------------------------------------------
+
+    whist_current_player = (
+        declarer + 1
+    ) % 3
+
+    whist_actions = ["", ""]
+
+    game_phase = "whist"
 
 def bot_make_whist():
 
@@ -6452,11 +6813,32 @@ def main():
             	bot_make_bid(current_bidder)
 
             if (
+                game_phase == "talon"
+                and declarer != 0
+            ):
+                take_talon()
+
+            if (
                 game_phase == "whist"
                 and whist_current_player != 0
             ):
 
                 bot_make_whist()
+
+            if (
+                game_phase == "discard"
+                and declarer != 0
+            ):
+
+                bot_make_discard()
+
+            if (
+                game_phase == "contract"
+                and declarer != 0
+            ):
+
+                bot_make_contract()
+
             if (
                 game_phase == "play"
                 and play_current_player != 0
