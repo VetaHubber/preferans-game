@@ -3613,6 +3613,10 @@ def bot_make_play():
         (player, card)
     )
 
+    if not trick_cards[:-1]:
+
+        trick_lead_suit = card[1]
+
     played_cards.append(
         (player, card)
     )
@@ -4836,6 +4840,19 @@ def main():
 
                                 if rect.collidepoint(event.pos):
 
+                                    same_suit_cards = [
+                                        hand_card
+                                        for hand_card in player_hands[0]
+                                        if hand_card[1] == trick_lead_suit
+                                    ]
+
+                                    if (
+                                        trick_cards
+                                        and same_suit_cards
+                                        and card[1] != trick_lead_suit
+                                    ):
+                                        break
+
                                     print(
                                         "РОЗЫГРЫШ: игрок 0 сыграл:",
                                         card
@@ -4845,19 +4862,37 @@ def main():
                                         (0, card)
                                     )
 
+                                    if len(trick_cards) == 1:
+
+                                        trick_lead_suit = card[1]
+
                                     played_cards.append(
                                         (0, card)
                                     )
-
-                                    if play_current_player == declarer:
-
-                                        trick_lead_suit = card[1]
 
                                     player_hands[0].remove(
                                         card
                                     )
 
-                                    play_current_player = 1
+                                    if len(trick_cards) == 3:
+
+                                        trick_winner = determine_trick_winner()
+
+                                        tricks_won[trick_winner] += 1
+
+                                        print(
+                                            "РОЗЫГРЫШ: взятку взял:",
+                                            trick_winner
+                                        )
+
+                                        trick_pause = True
+                                        trick_pause_start = pygame.time.get_ticks()
+
+                                    else:
+
+                                        play_current_player = (
+                                            play_current_player + 1
+                                        ) % 3
 
                                     break
 
