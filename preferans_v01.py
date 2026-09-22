@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.629
+# Преферанс — версия 0.630
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -1201,7 +1201,7 @@ def draw_player_action(surface):
 
     text = (
         declarer_contract
-        if game_phase in ("whist", "whist_done")
+        if game_phase in ("whist", "whist_done", "play")
         else player_bids[0]
     )
 
@@ -3467,6 +3467,7 @@ def bot_make_play():
     global play_current_player
     global trick_cards
     global played_cards
+    global trick_lead_suit
 
     if game_phase != "play":
         return
@@ -3479,7 +3480,33 @@ def bot_make_play():
     if not player_hands[player]:
         return
 
-    card = player_hands[player][0]
+    # --------------------------------------------------------
+    # Ищем карты масти хода
+    # --------------------------------------------------------
+
+    same_suit_cards = [
+        card
+        for card in player_hands[player]
+        if card[1] == trick_lead_suit
+    ]
+
+    # --------------------------------------------------------
+    # Если масть хода есть —
+    # обязательно играем этой мастью.
+    # --------------------------------------------------------
+
+    if same_suit_cards:
+
+        card = same_suit_cards[0]
+
+    # --------------------------------------------------------
+    # Если масти хода нет —
+    # пока играем первую карту.
+    # --------------------------------------------------------
+
+    else:
+
+        card = player_hands[player][0]
 
     print(
         "РОЗЫГРЫШ: ИИ",
@@ -4498,6 +4525,7 @@ def main():
     global game_phase
     global whist_current_player
     global play_current_player
+    global trick_lead_suit
 
     running = True
 
@@ -4703,6 +4731,10 @@ def main():
                                     played_cards.append(
                                         (0, card)
                                     )
+
+                                    if play_current_player == declarer:
+
+                                        trick_lead_suit = card[1]
 
                                     player_hands[0].remove(
                                         card
