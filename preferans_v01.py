@@ -4788,7 +4788,11 @@ def main():
 
                                 break
 
-                    elif game_started and game_phase == "play":
+                    elif (
+                        game_started
+                        and game_phase == "play"
+                        and not trick_pause
+                    ):
 
                         if play_current_player == 0:
 
@@ -5101,7 +5105,7 @@ def main():
                 if (
                     pygame.time.get_ticks()
                     - trick_pause_start
-                    >= 1000
+                    >= 2050
                 ):
 
                     played_cards.clear()
@@ -5122,6 +5126,119 @@ def main():
             draw_opponent_actions(screen)
             draw_player_action(screen)
             draw_players(screen)
+
+            # ------------------------------------------------
+            # Стрелка победителя взятки
+            # ------------------------------------------------
+
+            if trick_pause:
+
+                arrow_x = WIDTH // 2 + 110
+                arrow_y = HEIGHT - 340
+
+                arrow_color = (220, 40, 40)
+
+                if trick_winner == 0:
+
+                    # Вниз
+
+                    pygame.draw.rect(
+                        screen,
+                        arrow_color,
+                        (
+                            arrow_x - 8,
+                            arrow_y - 25,
+                            16,
+                            25
+                        )
+                    )
+
+                    pygame.draw.polygon(
+                        screen,
+                        arrow_color,
+                        [
+                            (
+                                arrow_x - 24,
+                                arrow_y
+                            ),
+                            (
+                                arrow_x + 24,
+                                arrow_y
+                            ),
+                            (
+                                arrow_x,
+                                arrow_y + 30
+                            )
+                        ]
+                    )
+
+                elif trick_winner == 1:
+
+                    # Влево
+
+                    pygame.draw.rect(
+                        screen,
+                        arrow_color,
+                        (
+                            arrow_x - 5,
+                            arrow_y - 8,
+                            25,
+                            16
+                        )
+                    )
+
+                    pygame.draw.polygon(
+                        screen,
+                        arrow_color,
+                        [
+                            (
+                                arrow_x - 30,
+                                arrow_y
+                            ),
+                            (
+                                arrow_x,
+                                arrow_y - 24
+                            ),
+                            (
+                                arrow_x,
+                                arrow_y + 24
+                            )
+                        ]
+                    )
+
+                elif trick_winner == 2:
+
+                    # Вправо
+
+                    pygame.draw.rect(
+                        screen,
+                        arrow_color,
+                        (
+                            arrow_x - 20,
+                            arrow_y - 8,
+                            25,
+                            16
+                        )
+                    )
+
+                    pygame.draw.polygon(
+                        screen,
+                        arrow_color,
+                        [
+                            (
+                                arrow_x + 30,
+                                arrow_y
+                            ),
+                            (
+                                arrow_x,
+                                arrow_y - 24
+                            ),
+                            (
+                                arrow_x,
+                                arrow_y + 24
+                            )
+                        ]
+                    )
 
             # ------------------------------------------------
             # Сыгранные карты на столе
