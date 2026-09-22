@@ -1275,7 +1275,7 @@ def draw_player_action(surface):
         image_rect = image.get_rect(
             midleft=(
                 x,
-                y + 42
+                background_rect.centery
             )
         )
 
