@@ -1046,29 +1046,65 @@ def draw_card_back(surface, rect):
 
 def draw_players(surface):
 
-    positions = [
+    # --------------------------------------------------------
+    # Настройки имён игроков
+    # --------------------------------------------------------
+
+    player_font_name = "Georgia"
+    player_font_size = 44
+    player_font_bold = True
+
+    player_positions = [
         (WIDTH // 2 - 55, HEIGHT - 28),
-        (95, HEIGHT // 2),
-        (WIDTH - 95, HEIGHT // 2),
+        (133, 23),
+        (WIDTH - 135, 23),
     ]
 
+    # --------------------------------------------------------
+    # Настройки количества взяток
+    # --------------------------------------------------------
+
+    tricks_font_name = "Georgia"
+    tricks_font_size = 44
+    tricks_font_bold = True
+
+    tricks_positions = [
+        None,
+        (440, 23),
+        (WIDTH - 440, 23),
+    ]
+
+    # --------------------------------------------------------
+    # Шрифты
+    # --------------------------------------------------------
+
+    player_font = pygame.font.SysFont(
+        player_font_name,
+        player_font_size,
+        bold=player_font_bold
+    )
+
+    tricks_font = pygame.font.SysFont(
+        tricks_font_name,
+        tricks_font_size,
+        bold=tricks_font_bold
+    )
+
     names = [
-        "ВЫ —",
+        "вы —",
         "СТУДЕНТ",
         "ДОЦЕНТ"
     ]
 
-    tricks_font = pygame.font.SysFont(
-        "Georgia",
-        34,
-        bold=True
-    )
+    # --------------------------------------------------------
+    # Отрисовка
+    # --------------------------------------------------------
 
-    for index, (x, y) in enumerate(positions):
+    for index, (x, y) in enumerate(player_positions):
 
         name = names[index]
 
-        label = font.render(
+        label = player_font.render(
             name,
             True,
             IVORY
@@ -1107,10 +1143,7 @@ def draw_players(surface):
         else:
 
             tricks_rect = tricks_label.get_rect(
-                center=(
-                    x,
-                    y + 48
-                )
+                center=tricks_positions[index]
             )
 
         surface.blit(
@@ -1331,8 +1364,8 @@ def draw_opponent_actions(surface):
             else opponent_actions[0]
         )
 
-        x = 190
-        y = 250
+        x = 185
+        y = 110
 
         background_rect = pygame.Rect(
             x - 12,
@@ -1413,8 +1446,8 @@ def draw_opponent_actions(surface):
             else opponent_actions[1]
         )
 
-        x = WIDTH - 275
-        y = 250
+        x = WIDTH - 375
+        y = 110
 
         background_rect = pygame.Rect(
             x - 12,
@@ -1588,13 +1621,13 @@ def draw_game_cards(surface):
     # --------------------------------------------------------
 
     left_x = 185
-    left_y = HEIGHT // 2 - 90
+    left_y = HEIGHT // 2 - 240
 
-    for index in range(10):
+    for index in range(len(player_hands[1])):
 
         rect = pygame.Rect(
-            left_x + index * 3,
-            left_y + index * 3,
+            left_x - index * 14,
+            left_y + index * 18.5,
             CARD_W,
             CARD_H
         )
@@ -1609,13 +1642,13 @@ def draw_game_cards(surface):
     # --------------------------------------------------------
 
     right_x = WIDTH - 261
-    right_y = HEIGHT // 2 - 90
+    right_y = HEIGHT // 2 - 240
 
-    for index in range(10):
+    for index in range(len(player_hands[2])):
 
         rect = pygame.Rect(
-            right_x - index * 3,
-            right_y + index * 3,
+            right_x + index * 14,
+            right_y + index * 18.5,
             CARD_W,
             CARD_H
         )
