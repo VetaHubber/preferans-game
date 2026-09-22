@@ -155,6 +155,12 @@ game_phase = "bidding"
 declarer = None
 declarer_contract = ""
 
+# ============================================================
+# СОСТОЯНИЕ РАСПАСОВКИ
+# ============================================================
+
+raspasovka = False
+
 discard_selection = []
 discard_button_rect = None
 whist_button_rects = []
@@ -3420,6 +3426,51 @@ def start_talon_phase():
 
     game_phase = "talon"
 
+def start_raspasovka():
+
+    global game_phase
+    global declarer
+    global declarer_contract
+    global play_current_player
+    global trick_cards
+    global trick_lead_suit
+    global trick_winner
+    global trick_number
+    global played_cards
+    global trick_pause
+    global trick_pause_start
+    global raspasovka
+
+    raspasovka = True
+
+    declarer = None
+    declarer_contract = "Распасовка"
+
+    play_current_player = (
+        dealer + 1
+    ) % 3
+
+    trick_cards = []
+    played_cards = []
+
+    trick_lead_suit = None
+    trick_winner = None
+
+    trick_number = 1
+
+    trick_pause = False
+    trick_pause_start = 0
+
+    game_phase = "play"
+
+    print(
+        "РАСПАСОВКА: начало",
+        "| сдающий:",
+        dealer,
+        "| первый ход:",
+        play_current_player
+    )
+
 
 def next_bidder():
 
@@ -3449,6 +3500,9 @@ def next_bidder():
 
             bidding_active = False
             bidding_finished = True
+
+            start_raspasovka()
+
             return
 
         # Если двое уже спасовали —
@@ -3597,7 +3651,11 @@ def determine_trick_winner():
 
     trump_suit = None
 
-    if declarer_contract not in ("", "Мизер"):
+    if declarer_contract not in (
+        "",
+        "Мизер",
+        "Распасовка"
+    ):
 
         if not declarer_contract.endswith("БК"):
             trump_suit = declarer_contract[-1]
@@ -3710,20 +3768,33 @@ def bot_make_play():
     # Определяем козырь
     # --------------------------------------------------------
 
-    suit, level = get_bid_contract(
-        declarer_contract
-    )
+    if raspasovka:
 
-    if suit in ("БК", "Мизер"):
+        suit = "Распасовка"
+        level = 0
         trump = None
+
     else:
-        trump = suit
+
+        suit, level = get_bid_contract(
+            declarer_contract
+        )
+
+        if suit in ("БК", "Мизер"):
+            trump = None
+        else:
+            trump = suit
 
     # --------------------------------------------------------
     # Определяем роль игрока
     # --------------------------------------------------------
 
-    if player == declarer:
+    if raspasovka:
+
+        role = "pass"
+        action = ""
+
+    elif player == declarer:
 
         role = "declarer"
         action = ""
