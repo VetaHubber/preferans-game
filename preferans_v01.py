@@ -1329,11 +1329,22 @@ def draw_player_action(surface):
 
 def draw_opponent_actions(surface):
 
-    whist_display_actions = {}
+    # ----------------------------------------------------
+    # Определяем, какие решения вистующих показывать
+    # ----------------------------------------------------
 
     if (
-        game_phase in ("whist", "whist_done")
-        and declarer is not None
+        declarer is not None
+        and (
+            game_phase in (
+                "whist",
+                "whist_done",
+                "play",
+                "result"
+            )
+            or whist_actions[0]
+            or whist_actions[1]
+        )
     ):
 
         whist_display_actions = {
@@ -1341,39 +1352,32 @@ def draw_opponent_actions(surface):
             (declarer + 2) % 3: whist_actions[1]
         }
 
-    # Шрифт для обычного текста
+    else:
+
+        whist_display_actions = {}
+
+    # ----------------------------------------------------
+    # Шрифты
+    # ----------------------------------------------------
+
     font = pygame.font.SysFont(
         "Georgia",
         64
     )
 
-    # Шрифт, который умеет рисовать ♠ ♣ ♦ ♥
     suit_font = pygame.font.SysFont(
         "DejaVu Sans",
         86
     )
 
     # ----------------------------------------------------
-    # Левый соперник
+    # Функция отрисовки текста
     # ----------------------------------------------------
 
-    if (
-        opponent_actions[0]
-        or (
-            1 in whist_display_actions
-            and whist_display_actions[1] != ""
-        )
-    ):
+    def draw_action(text, x, y):
 
-        text = (
-            whist_display_actions[1]
-            if game_phase in ("whist", "whist_done")
-            and whist_display_actions[1] != ""
-            else opponent_actions[0]
-        )
-
-        x = 185
-        y = 110
+        if not text:
+            return
 
         background_rect = pygame.Rect(
             x - 12,
@@ -1397,8 +1401,61 @@ def draw_opponent_actions(surface):
             border_radius=10
         )
 
-        # Рисуем строку посимвольно,
-        # чтобы масть гарантированно была DejaVu Sans
+        # ------------------------------------------------
+        # ПОЛВИСТА — две строки
+        # ------------------------------------------------
+
+        if text == "ПОЛВИСТА":
+
+            small_font = pygame.font.SysFont(
+                "Georgia",
+                50
+            )
+
+            line1 = small_font.render(
+                "ПОЛ",
+                True,
+                BLACK
+            )
+
+            line2 = small_font.render(
+                "ВИСТА",
+                True,
+                BLACK
+            )
+
+            # Центрируем каждую строку
+            line1_x = (
+                background_rect.centerx
+                - line1.get_width() // 2
+            )
+
+            line2_x = (
+                background_rect.centerx
+                - line2.get_width() // 2
+            )
+
+            surface.blit(
+                line1,
+                (
+                    line1_x,
+                    y - 12
+                )
+            )
+
+            surface.blit(
+                line2,
+                (
+                    line2_x,
+                    y + 42
+                )
+            )
+
+            return
+
+        # ------------------------------------------------
+        # Обычные надписи
+        # ------------------------------------------------
 
         current_x = x
 
@@ -1432,85 +1489,48 @@ def draw_opponent_actions(surface):
             )
 
             current_x += char_surface.get_width()
+
+    # ----------------------------------------------------
+    # Левый соперник
+    # ----------------------------------------------------
+
+    if whist_display_actions:
+
+        text = whist_display_actions.get(
+            1,
+            ""
+        )
+
+    else:
+
+        text = opponent_actions[0]
+
+    draw_action(
+        text,
+        185,
+        110
+    )
 
     # ----------------------------------------------------
     # Правый соперник
     # ----------------------------------------------------
 
-    if (
-        opponent_actions[1]
-        or (
-            2 in whist_display_actions
-            and whist_display_actions[2] != ""
-        )
-    ):
+    if whist_display_actions:
 
-        text = (
-            whist_display_actions[2]
-            if (
-                2 in whist_display_actions
-                and whist_display_actions[2] != ""
-            )
-            else opponent_actions[1]
+        text = whist_display_actions.get(
+            2,
+            ""
         )
 
-        x = WIDTH - 375
-        y = 110
+    else:
 
-        background_rect = pygame.Rect(
-            x - 12,
-            y - 8,
-            215,
-            100
-        )
+        text = opponent_actions[1]
 
-        pygame.draw.rect(
-            surface,
-            IVORY,
-            background_rect,
-            border_radius=10
-        )
-
-        pygame.draw.rect(
-            surface,
-            GOLD,
-            background_rect,
-            width=2,
-            border_radius=10
-        )        
-
-        current_x = x
-
-        for char in text:
-
-            if char in "♠♣♦♥":
-
-                suit_color = (
-                    RED
-                    if char in "♦♥"
-                    else BLACK
-                )
-
-                char_surface = suit_font.render(
-                    char,
-                    True,
-                    suit_color
-                )
-
-            else:
-
-                char_surface = font.render(
-                    char,
-                    True,
-                    BLACK
-                )
-
-            surface.blit(
-                char_surface,
-                (current_x, y)
-            )
-
-            current_x += char_surface.get_width()
+    draw_action(
+        text,
+        WIDTH - 375,
+        110
+    )
 
 
 # ============================================================
