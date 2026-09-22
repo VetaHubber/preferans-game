@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.631
+# Преферанс — версия 0.632
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -3600,49 +3600,69 @@ def determine_trick_winner():
     if declarer_contract not in ("", "Мизер"):
 
         if not declarer_contract.endswith("БК"):
-
             trump_suit = declarer_contract[-1]
 
     # --------------------------------------------------------
-    # Победитель
+    # Первый игрок пока считается победителем
     # --------------------------------------------------------
 
     winner_player, winner_card = trick_cards[0]
 
+    # --------------------------------------------------------
+    # Проверяем остальные карты
+    # --------------------------------------------------------
+
     for player, card in trick_cards[1:]:
 
-        current_rank = rank_order[card[0]]
-        winner_rank = rank_order[winner_card[0]]
-
         # ----------------------------------------------------
-        # Козырь бьёт некозырную карту
+        # Если текущая карта — козырь
         # ----------------------------------------------------
 
         if trump_suit is not None:
 
-            if (
-                card[1] == trump_suit
-                and winner_card[1] != trump_suit
-            ):
+            if card[1] == trump_suit:
 
-                winner_player = player
-                winner_card = card
+                # Если победитель ещё не козырь —
+                # новый козырь автоматически сильнее.
+                if winner_card[1] != trump_suit:
+
+                    winner_player = player
+                    winner_card = card
+                    continue
+
+                # Если оба козырные —
+                # сравниваем их достоинство.
+                if (
+                    rank_order[card[0]]
+                    > rank_order[winner_card[0]]
+                ):
+
+                    winner_player = player
+                    winner_card = card
+
                 continue
 
-            if (
-                card[1] != trump_suit
-                and winner_card[1] == trump_suit
-            ):
+            # ------------------------------------------------
+            # Текущая карта не козырь,
+            # а победитель уже козырный.
+            # ------------------------------------------------
 
+            if winner_card[1] == trump_suit:
                 continue
 
         # ----------------------------------------------------
-        # Карта другой масти не может побить
+        # Карта не козырь.
+        # Она может выиграть только если
+        # относится к масти хода.
         # ----------------------------------------------------
 
         if card[1] != trick_lead_suit:
-
             continue
+
+        # ----------------------------------------------------
+        # Если победитель пока был другой масти,
+        # карта масти хода становится победителем.
+        # ----------------------------------------------------
 
         if winner_card[1] != trick_lead_suit:
 
@@ -3651,10 +3671,14 @@ def determine_trick_winner():
             continue
 
         # ----------------------------------------------------
-        # Старшая карта масти хода
+        # Обе карты масти хода —
+        # сравниваем достоинство.
         # ----------------------------------------------------
 
-        if current_rank > winner_rank:
+        if (
+            rank_order[card[0]]
+            > rank_order[winner_card[0]]
+        ):
 
             winner_player = player
             winner_card = card
@@ -3667,6 +3691,9 @@ def bot_make_play():
     global trick_cards
     global played_cards
     global trick_lead_suit
+    global trick_winner
+    global trick_pause
+    global trick_pause_start
 
     if game_phase != "play":
         return
@@ -3680,37 +3707,605 @@ def bot_make_play():
         return
 
     # --------------------------------------------------------
-    # Ищем карты масти хода
+    # Определяем козырь
     # --------------------------------------------------------
 
-    same_suit_cards = [
-        card
-        for card in player_hands[player]
-        if card[1] == trick_lead_suit
-    ]
+    suit, level = get_bid_contract(
+        declarer_contract
+    )
+
+    if suit in ("БК", "Мизер"):
+        trump = None
+    else:
+        trump = suit
 
     # --------------------------------------------------------
-    # Если масть хода есть —
-    # обязательно играем этой мастью.
+    # Определяем роль игрока
     # --------------------------------------------------------
 
-    if same_suit_cards:
+    if player == declarer:
 
-        card = same_suit_cards[0]
+        role = "declarer"
+        action = ""
+
+    else:
+
+        action_index = (
+            player
+            - declarer
+            - 1
+        ) % 3
+
+        action = whist_actions[
+            action_index
+        ]
+
+        if action == "ВИСТ":
+            role = "whist"
+
+        elif action == "ПОЛВИСТА":
+            role = "half_whist"
+
+        else:
+            role = "pass"
 
     # --------------------------------------------------------
-    # Если масти хода нет —
-    # пока играем первую карту.
+    # Стратегическая цель по взяткам
+    #
+    # NEED_TRICKS  - взяток пока не хватает
+    # SAFE         - необходимая норма уже выполнена
+    # AVOID_TRICKS - нужно избегать взяток
+    # --------------------------------------------------------
+
+    goal_state = "AVOID_TRICKS"
+
+    required_tricks = 0
+
+    # --------------------------------------------------------
+    # Мизер
+    # --------------------------------------------------------
+
+    if suit == "Мизер":
+
+        if player == declarer:
+
+            # Разыгрывающий старается
+            # вообще не брать взятки.
+            goal_state = "AVOID_TRICKS"
+
+        else:
+
+            # Противники стараются
+            # отдавать взятки разыгрывающему.
+            goal_state = "NEED_TRICKS"
+
+    # --------------------------------------------------------
+    # Обычный контракт
     # --------------------------------------------------------
 
     else:
 
-        card = player_hands[player][0]
+        if role == "declarer":
+
+            required_tricks = level
+
+            if tricks_won[player] < required_tricks:
+
+                goal_state = "NEED_TRICKS"
+
+            else:
+
+                # Контракт уже выполнен.
+                # Теперь не нужно бездумно брать новые взятки.
+                goal_state = "SAFE"
+
+        elif role == "pass":
+
+            # Пасующий всё равно играет карты,
+            # но старается не брать взятки.
+            goal_state = "AVOID_TRICKS"
+
+        elif role == "whist":
+
+            required_tricks = {
+                6: 4,
+                7: 2,
+                8: 1,
+                9: 1,
+                10: 1
+            }.get(
+                level,
+                1
+            )
+
+            if tricks_won[player] < required_tricks:
+
+                # Вистующим пока нужны взятки.
+                goal_state = "NEED_TRICKS"
+
+            else:
+
+                # Норма уже выполнена.
+                # Теперь стараемся не брать лишнего.
+                goal_state = "SAFE"
+
+        elif role == "half_whist":
+
+            required_tricks = {
+                6: 2,
+                7: 1
+            }.get(
+                level,
+                1
+            )
+
+            if tricks_won[player] < required_tricks:
+
+                goal_state = "NEED_TRICKS"
+
+            else:
+
+                goal_state = "SAFE"
+
+    # --------------------------------------------------------
+    # Для отладки
+    # --------------------------------------------------------
+
+    print(
+        "РОЗЫГРЫШ: цель ИИ",
+        player,
+        "| состояние:",
+        goal_state,
+        "| взятки:",
+        tricks_won[player],
+        "| норма:",
+        required_tricks
+    )
+
+    # --------------------------------------------------------
+    # Определяем разрешённые карты
+    # --------------------------------------------------------
+
+    hand = player_hands[player]
+
+    if trick_cards:
+
+        same_suit_cards = [
+            card
+            for card in hand
+            if card[1] == trick_lead_suit
+        ]
+
+        if same_suit_cards:
+
+            legal_cards = same_suit_cards
+
+        elif trump is not None:
+
+            trump_cards = [
+                card
+                for card in hand
+                if card[1] == trump
+            ]
+
+            if trump_cards:
+
+                legal_cards = trump_cards
+
+            else:
+
+                legal_cards = hand
+
+        else:
+
+            legal_cards = hand
+
+    else:
+
+        legal_cards = hand
+
+    # --------------------------------------------------------
+    # Определяем, берёт ли карта текущую взятку
+    # --------------------------------------------------------
+
+    def card_wins(card):
+
+        trick_cards.append(
+            (player, card)
+        )
+
+        winner = determine_trick_winner()
+
+        trick_cards.pop()
+
+        return winner == player
+
+    # --------------------------------------------------------
+    # Насколько карта сильная
+    # --------------------------------------------------------
+
+    def card_value(card):
+
+        return card_strength(
+            card[0]
+        )
+
+    # --------------------------------------------------------
+    # Оценка будущей руки
+    #
+    # Здесь бот смотрит:
+    # - какие сильные карты останутся;
+    # - сколько козырей останется;
+    # - есть ли короткие масти;
+    # - сколько вообще карт останется.
+    #
+    # Это не полный просчёт сдачи, а небольшой
+    # человеческий взгляд вперёд.
+    # --------------------------------------------------------
+
+    def future_value(card):
+
+        remaining_hand = [
+            c
+            for c in hand
+            if c != card
+        ]
+
+        if not remaining_hand:
+            return 0
+
+        value = 0
+
+        # ----------------------------------------------------
+        # Сохраняем сильные карты
+        # ----------------------------------------------------
+
+        for remaining_card in remaining_hand:
+
+            strength = card_value(
+                remaining_card
+            )
+
+            if strength >= 6:
+                value += 2
+
+            if strength >= 7:
+                value += 2
+
+        # ----------------------------------------------------
+        # Козыри особенно ценны
+        # ----------------------------------------------------
+
+        if trump is not None:
+
+            remaining_trumps = [
+                c
+                for c in remaining_hand
+                if c[1] == trump
+            ]
+
+            value += (
+                len(remaining_trumps) * 3
+            )
+
+            # Старший козырь особенно ценен.
+            for c in remaining_trumps:
+
+                if card_value(c) >= 6:
+                    value += 2
+
+        # ----------------------------------------------------
+        # Короткая масть даёт возможность
+        # избавиться от неё позже.
+        # ----------------------------------------------------
+
+        suits = (
+            "♠",
+            "♣",
+            "♦",
+            "♥"
+        )
+
+        for current_suit in suits:
+
+            count = sum(
+                1
+                for c in remaining_hand
+                if c[1] == current_suit
+            )
+
+            if count == 1:
+                value += 2
+
+            elif count == 0:
+                value += 3
+
+        return value
+
+    # --------------------------------------------------------
+    # Оценка конкретной карты
+    #
+    # Чем выше score, тем предпочтительнее карта.
+    # --------------------------------------------------------
+
+    def evaluate_card(card):
+
+        wins_now = False
+        simulated_winner = None
+
+        if trick_cards:
+
+            wins_now = card_wins(
+                card
+            )
+
+            # ------------------------------------------------
+            # Временно добавляем карту во взятку
+            # и определяем, кому она достанется.
+            # ------------------------------------------------
+
+            trick_cards.append(
+                (player, card)
+            )
+
+            simulated_winner = (
+                determine_trick_winner()
+            )
+
+            trick_cards.pop()
+
+        score = 0
+
+        current_strength = card_value(
+            card
+        )
+
+        future = future_value(
+            card
+        )
+
+        # ----------------------------------------------------
+        # Взятки нужны
+        # ----------------------------------------------------
+
+        if goal_state == "NEED_TRICKS":
+
+            if wins_now:
+
+                # Взятка сейчас полезна.
+                score += 100
+
+                # Но берём её по возможности
+                # минимальной картой.
+                score -= (
+                    current_strength * 4
+                )
+
+            else:
+
+                # Если взять сейчас нельзя,
+                # смотрим, кому уйдёт взятка.
+                if simulated_winner == declarer:
+
+                    # ВИСТУ невыгодно просто отдавать
+                    # взятку разыгрывающему.
+                    score -= 55
+
+                elif (
+                    simulated_winner is not None
+                    and simulated_winner != player
+                ):
+
+                    # Другой противник получил взятку.
+                    score += 20
+
+                score += future
+
+                # При невозможности взять
+                # лучше не выбрасывать сильную карту.
+                score -= (
+                    current_strength * 2
+                )
+
+        # ----------------------------------------------------
+        # Норма уже выполнена
+        # ----------------------------------------------------
+
+        elif goal_state == "SAFE":
+
+            if wins_now:
+
+                # Лишнюю взятку брать не хочется.
+                score -= 100
+
+                # Сильную карту особенно жалко тратить.
+                score -= (
+                    current_strength * 3
+                )
+
+                score += (
+                    future * 2
+                )
+
+            else:
+
+                # Теперь важно, кому достанется взятка.
+                if simulated_winner == declarer:
+
+                    # Отдать взятку декларанту
+                    # после выполнения своей нормы нежелательно.
+                    score -= 35
+
+                elif (
+                    simulated_winner is not None
+                    and simulated_winner != player
+                ):
+
+                    # Взятка достанется другому противнику.
+                    score += 15
+
+                score += 60
+                score += future
+
+                score -= (
+                    current_strength * 2
+                )
+
+        # ----------------------------------------------------
+        # Взятки нужно избегать
+        # ----------------------------------------------------
+
+        elif goal_state == "AVOID_TRICKS":
+
+            if wins_now:
+
+                # Сам бот забирает взятку.
+                score -= 120
+
+                score += (
+                    future * 2
+                )
+
+            else:
+
+                # ------------------------------------------------
+                # Важен не только факт, что бот НЕ берёт взятку,
+                # но и то, кому она достанется.
+                # ------------------------------------------------
+
+                if simulated_winner == declarer:
+
+                    # Для пасующего это плохой результат:
+                    # взятку получает декларант.
+                    score -= 45
+
+                elif (
+                    simulated_winner is not None
+                    and simulated_winner != player
+                ):
+
+                    # Взятку получает другой противник
+                    # декларанта — это обычно выгоднее.
+                    score += 30
+
+                else:
+
+                    # Если победитель почему-то не определён,
+                    # сохраняем обычную оценку безопасного сброса.
+                    score += 10
+
+                score += 50
+
+                score += future
+
+                score -= (
+                    current_strength * 3
+                )
+
+        # ----------------------------------------------------
+        # Козырь не следует тратить без причины
+        # ----------------------------------------------------
+
+        if trump is not None:
+
+            if card[1] == trump:
+
+                if goal_state != "NEED_TRICKS":
+
+                    score -= 15
+
+                elif not wins_now:
+
+                    score -= 10
+
+        # ----------------------------------------------------
+        # На первом ходе нет текущей взятки.
+        # Поэтому отдельно оцениваем направление хода.
+        # ----------------------------------------------------
+
+        if not trick_cards:
+
+            if goal_state == "NEED_TRICKS":
+
+                # ВИСТ/декларант любит начинать
+                # сильной картой, но не обязательно
+                # самой старшей.
+                score += (
+                    current_strength * 5
+                )
+
+                score += future
+
+                if trump is not None:
+                    if card[1] == trump:
+                        score -= 8
+
+            else:
+
+                # ПАС старается начинать безопасно.
+                score += (
+                    40
+                    - current_strength * 5
+                )
+
+                # Короткая масть может быть полезна:
+                # после её окончания можно будет
+                # сбрасывать другие карты.
+                suit_count = sum(
+                    1
+                    for c in hand
+                    if c[1] == card[1]
+                )
+
+                if suit_count == 1:
+                    score += 8
+
+        # ----------------------------------------------------
+        # Если карта оставляет после себя
+        # хороший набор — это дополнительный плюс.
+        # ----------------------------------------------------
+
+        score += future
+
+        return score
+
+    # --------------------------------------------------------
+    # Выбираем карту с учётом текущей ситуации
+    # и небольшой оценки будущего.
+    # --------------------------------------------------------
+
+    best_card = legal_cards[0]
+    best_score = evaluate_card(
+        best_card
+    )
+
+    for candidate in legal_cards[1:]:
+
+        candidate_score = evaluate_card(
+            candidate
+        )
+
+        if candidate_score > best_score:
+
+            best_card = candidate
+            best_score = candidate_score
+
+    card = best_card
+
+    # --------------------------------------------------------
+    # Играем карту
+    # --------------------------------------------------------
 
     print(
         "РОЗЫГРЫШ: ИИ",
         player,
-        "сыграл:",
+        "| роль:",
+        role,
+        "| решение:",
+        action,
+        "| взятки:",
+        tricks_won[player],
+        "| сыграл:",
         card
     )
 
@@ -3718,7 +4313,7 @@ def bot_make_play():
         (player, card)
     )
 
-    if not trick_cards[:-1]:
+    if len(trick_cards) == 1:
 
         trick_lead_suit = card[1]
 
@@ -3730,15 +4325,17 @@ def bot_make_play():
         card
     )
 
-    if len(trick_cards) == 3:
+    # --------------------------------------------------------
+    # Закончилась взятка
+    # --------------------------------------------------------
 
-        global trick_winner
-        global trick_pause
-        global trick_pause_start
+    if len(trick_cards) == 3:
 
         trick_winner = determine_trick_winner()
 
-        tricks_won[trick_winner] += 1
+        tricks_won[
+            trick_winner
+        ] += 1
 
         print(
             "РОЗЫГРЫШ: взятку взял:",
@@ -3746,7 +4343,10 @@ def bot_make_play():
         )
 
         trick_pause = True
-        trick_pause_start = pygame.time.get_ticks()
+
+        trick_pause_start = (
+            pygame.time.get_ticks()
+        )
 
         return
 
