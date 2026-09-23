@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.633
+# Преферанс — версия 0.634
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -1213,14 +1213,29 @@ def draw_player_action(surface):
     if not player_bids[0]:
         return
 
-    text = (
-        declarer_contract
-        if (
-            game_phase in ("whist", "whist_done", "play")
-            and declarer == 0
-        )
-        else player_bids[0]
-    )
+    if (
+        game_phase in ("whist", "whist_done", "play")
+        and declarer == 0
+    ):
+
+        text = declarer_contract
+
+    elif (
+        game_phase in ("whist", "whist_done", "play")
+        and declarer is not None
+        and declarer != 0
+        and whist_actions[
+            (0 - declarer - 1) % 3
+        ]
+    ):
+
+        text = whist_actions[
+            (0 - declarer - 1) % 3
+        ]
+
+    else:
+
+        text = player_bids[0]
 
     if game_phase == "play":
 
@@ -1503,7 +1518,15 @@ def draw_opponent_actions(surface):
     # Левый соперник
     # ----------------------------------------------------
 
-    if whist_display_actions:
+    if (
+        declarer is not None
+        and declarer == 1
+        and declarer_contract
+    ):
+
+        text = declarer_contract
+
+    elif whist_display_actions:
 
         text = whist_display_actions.get(
             1,
@@ -1524,7 +1547,15 @@ def draw_opponent_actions(surface):
     # Правый соперник
     # ----------------------------------------------------
 
-    if whist_display_actions:
+    if (
+        declarer is not None
+        and declarer == 2
+        and declarer_contract
+    ):
+
+        text = declarer_contract
+
+    elif whist_display_actions:
 
         text = whist_display_actions.get(
             2,
@@ -2202,14 +2233,16 @@ def analyze_suit_hand(hand, trump, level):
     score = 0
 
     trump_cards = []
-    side_cards = []
-
     suit_counts = {
         "♠": 0,
         "♣": 0,
         "♦": 0,
         "♥": 0
     }
+
+    # --------------------------------------------------------
+    # Считаем карты по мастям
+    # --------------------------------------------------------
 
     for rank, suit in hand:
 
@@ -2219,72 +2252,82 @@ def analyze_suit_hand(hand, trump, level):
 
             trump_cards.append(rank)
 
-        else:
-
-            side_cards.append(
-                (rank, suit)
-            )
-
     # --------------------------------------------------------
-    # Сила козырной масти
+    # Сила козырей
     # --------------------------------------------------------
 
     for rank in trump_cards:
 
         value = card_strength(rank)
 
-        score += value * 1.6
+        score += value * 2.0
 
         if rank == "Т":
 
-            score += 6
+            score += 7
 
         elif rank == "К":
 
-            score += 3
+            score += 4
 
         elif rank == "Д":
 
-            score += 1
+            score += 2
 
     # --------------------------------------------------------
-    # Длина козыря
+    # Длина козырной масти
+    #
+    # Длинная козырная масть очень важна после прикупа.
+    # Пять козырей должны заметно превосходить
+    # три старшие карты одной масти.
     # --------------------------------------------------------
 
     trump_length = len(trump_cards)
 
-    if trump_length >= 5:
+    if trump_length >= 6:
 
-        score += 7
+        score += 18
+
+    elif trump_length == 5:
+
+        score += 13
 
     elif trump_length == 4:
 
-        score += 4
+        score += 7
 
     elif trump_length == 3:
 
-        score += 1
+        score += 0
+
+    elif trump_length == 2:
+
+        score -= 7
 
     # --------------------------------------------------------
-    # Старшие карты в других мастях
+    # Старшие карты в боковых мастях
     # --------------------------------------------------------
 
-    for rank, suit in side_cards:
+    for rank, suit in hand:
+
+        if suit == trump:
+
+            continue
 
         if rank == "Т":
 
-            score += 4
+            score += 5
 
         elif rank == "К":
 
-            score += 1.5
+            score += 2
 
         elif rank == "Д":
 
             score += 0.5
 
     # --------------------------------------------------------
-    # Длинные побочные масти
+    # Длина боковых мастей
     # --------------------------------------------------------
 
     for suit_name in suit_counts:
@@ -2304,17 +2347,33 @@ def analyze_suit_hand(hand, trump, level):
             score += 1
 
     # --------------------------------------------------------
-    # Чем выше контракт, тем больше требуется силы.
+    # Дополнительный бонус за очень сильный козырь.
     #
-    # Это НЕ означает автоматический отказ.
-    # Это лишь увеличивает необходимый порог.
+    # Туз + король в козыре особенно хороши.
+    # --------------------------------------------------------
+
+    if "Т" in trump_cards:
+
+        score += 3
+
+    if (
+        "Т" in trump_cards
+        and "К" in trump_cards
+    ):
+
+        score += 4
+
+    # --------------------------------------------------------
+    # Требуемая сила для разных уровней.
+    #
+    # Шкала специально сделана плавнее.
     # --------------------------------------------------------
 
     required = {
-        6: 20,
-        7: 27,
-        8: 34,
-        9: 41,
+        6: 24,
+        7: 30,
+        8: 36,
+        9: 42,
         10: 48
     }
 
@@ -2324,7 +2383,7 @@ def analyze_suit_hand(hand, trump, level):
     )
 
     # --------------------------------------------------------
-    # Запас силы относительно требуемого уровня.
+    # Запас силы относительно контракта.
     # --------------------------------------------------------
 
     confidence = score - target
@@ -2479,6 +2538,51 @@ def estimate_bid_confidence(hand, bid):
         hand,
         bid
     )
+
+def estimate_raspas_danger(hand):
+
+    score = 0
+
+    suit_counts = {
+        "♠": 0,
+        "♣": 0,
+        "♦": 0,
+        "♥": 0
+    }
+
+    for rank, suit in hand:
+
+        suit_counts[suit] += 1
+
+        if rank == "Т":
+            score += 10
+
+        elif rank == "К":
+            score += 6
+
+        elif rank == "Д":
+            score += 3
+
+        elif rank == "В":
+            score += 1
+
+        elif rank == "10":
+            score += 0.5
+
+    for suit in suit_counts:
+
+        count = suit_counts[suit]
+
+        if count >= 5:
+            score += 6
+
+        elif count == 4:
+            score += 4
+
+        elif count == 3:
+            score += 2
+
+    return score
 
 
 def estimate_best_bid(hand):
@@ -3111,13 +3215,20 @@ def choose_bot_bid(
 
     for bid, probability, average_tricks in evaluations:
 
+        confidence = estimate_bid_confidence(
+            hand,
+            bid
+        )
+
         print(
             bid,
             "успех:",
             round(probability * 100, 1),
             "%",
             "средние взятки:",
-            round(average_tricks, 2)
+            round(average_tricks, 2),
+            "| confidence:",
+            round(confidence, 1)
         )
 
     # --------------------------------------------------------
@@ -3177,8 +3288,13 @@ def choose_bot_bid(
     # В обычной ситуации вероятность должна быть
     # не меньше 45%.
     #
-    # Если ИИ уже сам сделал сильную заявку,
-    # но его перебили, разрешаем ему рискнуть.
+    # Но если рука объективно достаточно сильная
+    # для данной заявки, ИИ может рискнуть даже
+    # при низком результате симуляции.
+    #
+    # Это делает торговлю более похожей на игру человека:
+    # сильная рука не должна автоматически превращаться
+    # в "Пас" только из-за неудачной случайной симуляции.
     # --------------------------------------------------------
 
     if defend_previous_bid:
@@ -3195,24 +3311,73 @@ def choose_bot_bid(
 
     else:
 
-        reasonable = [
-            item
-            for item in evaluations
-            if (
-                item[1] >= 0.50
-                if item[0] == "Мизер"
-                else (
-                    item[1] >= 0.45
-                    or (
-                        estimate_bid_confidence(
-                            hand,
-                            item[0]
-                        ) >= 15
-                        and item[1] >= 0.30
-                    )
-                )
+        reasonable = []
+
+        for item in evaluations:
+
+            bid = item[0]
+            probability = item[1]
+
+            # ------------------------------------------------
+            # Мизер оставляем по старому правилу.
+            # ------------------------------------------------
+
+            if bid == "Мизер":
+
+                if probability >= 0.50:
+
+                    reasonable.append(item)
+
+                continue
+
+            # ------------------------------------------------
+            # Обычное прохождение заявки по симуляции.
+            # ------------------------------------------------
+
+            if probability >= 0.45:
+
+                reasonable.append(item)
+
+                continue
+
+            # ------------------------------------------------
+            # Если симуляция пессимистична, проверяем
+            # реальную силу руки.
+            # ------------------------------------------------
+
+            confidence = estimate_bid_confidence(
+                hand,
+                bid
             )
-        ]
+
+            # ------------------------------------------------
+            # Сильная рука может рискнуть.
+            #
+            # confidence >= 15:
+            # заявка достаточно сильная,
+            # поэтому допускаем вероятность от 20%.
+            #
+            # confidence >= 25:
+            # рука настолько сильная, что результат
+            # симуляции уже не является обязательным
+            # условием.
+            # ------------------------------------------------
+
+            if (
+                confidence >= 15
+                and probability >= 0.20
+            ):
+
+                reasonable.append(item)
+
+                continue
+
+            if (
+                confidence >= 25
+                and probability >= 0.20
+            ):
+
+                reasonable.append(item)
 
     if not reasonable:
 
@@ -4698,8 +4863,6 @@ def bot_make_play():
 
                 score += 50
 
-                score += future
-
                 score -= (
                     current_strength * 3
                 )
@@ -5169,6 +5332,8 @@ def bot_make_discard():
     global game_phase
     global player_hands
     global discard_selection
+    global whist_current_player
+    global whist_actions
 
     if game_phase != "discard":
         return
@@ -5389,6 +5554,12 @@ def bot_make_discard():
     # --------------------------------------------------------
 
     if declarer_contract == "Мизер":
+
+        whist_current_player = (
+            declarer + 1
+        ) % 3
+
+        whist_actions = ["", ""]
 
         game_phase = "whist"
 
@@ -6104,15 +6275,39 @@ def bot_make_contract():
         )
 
     # --------------------------------------------------------
-    # Ищем наиболее высокий контракт,
-    # который ИИ считает подходящим.
+    # Для разных уровней требуется разная сила руки.
+    #
+    # Чем выше контракт, тем выше должен быть
+    # запас уверенности.
     # --------------------------------------------------------
 
-    reasonable = [
-        item
-        for item in evaluations
-        if item[1] >= 0
-    ]
+    required_confidence = {
+        6: 0,
+        7: 16,
+        8: 24,
+        9: 38,
+        10: 46
+    }
+
+    reasonable = []
+
+    for item in evaluations:
+
+        contract = item[0]
+        confidence = item[1]
+
+        suit, level = get_bid_contract(
+            contract
+        )
+
+        target = required_confidence.get(
+            level,
+            32
+        )
+
+        if confidence >= target:
+
+            reasonable.append(item)
 
     if reasonable:
 
@@ -6126,8 +6321,8 @@ def bot_make_contract():
 
     else:
 
-        # Если рука ничего уверенно не тянет,
-        # берём минимально допустимый контракт.
+        # Если рука ничего достаточно уверенно
+        # не тянет, берём минимально допустимый контракт.
         evaluations.sort(
             key=lambda item: get_bid_value(
                 item[0]
@@ -6366,6 +6561,7 @@ def main():
     global game_started
     global game_phase
     global whist_current_player
+    global whist_choice
     global play_current_player
     global trick_lead_suit
     global trick_winner
@@ -6499,6 +6695,12 @@ def main():
                                 )
 
                                 whist_choice = action
+
+                                print(
+                                    "ПРОВЕРКА ПЛАШКИ:",
+                                    "whist_choice =",
+                                    whist_choice
+                                )
 
                                 whist_current_player = (
                                     whist_current_player + 1
