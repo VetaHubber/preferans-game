@@ -4734,6 +4734,41 @@ def bot_make_play():
                     current_strength * 4
                 )
 
+                # ------------------------------------------------
+                # Если это козырь и он уже гарантированно
+                # выигрывает текущую взятку, стараемся
+                # сохранить более старший козырь на потом.
+                #
+                # Например:
+                # 9♥ и Т♥ обе берут взятку.
+                # Если сыграть 9♥, Т♥ останется для следующей.
+                # ------------------------------------------------
+
+                if (
+                    trump is not None
+                    and card[1] == trump
+                ):
+
+                    stronger_trump_remaining = False
+
+                    for other_card in hand:
+
+                        if other_card == card:
+                            continue
+
+                        if (
+                            other_card[1] == trump
+                            and card_value(other_card)
+                            > current_strength
+                        ):
+
+                            stronger_trump_remaining = True
+                            break
+
+                    if stronger_trump_remaining:
+
+                        score += 8
+
             else:
 
                 # Если взять сейчас нельзя,
@@ -6599,25 +6634,44 @@ def bot_make_contract():
         # В таком случае преимущество получает
         # более сильная по confidence рука.
 
-        max_average_tricks = max(
-            item[3]
-            for item in evaluations
-        )
-
-        close_evaluations = [
+        positive_evaluations = [
             item
             for item in evaluations
-            if item[3] >= max_average_tricks - 0.20
+            if item[2] > 0
         ]
 
-        close_evaluations.sort(
-            key=lambda item: (
-                item[1],
-                item[3]
-            )
-        )
+        if positive_evaluations:
 
-        selected_contract = close_evaluations[-1][0]
+            max_average_tricks = max(
+                item[3]
+                for item in positive_evaluations
+            )
+
+            close_evaluations = [
+                item
+                for item in positive_evaluations
+                if item[3] >= max_average_tricks - 0.20
+            ]
+
+            close_evaluations.sort(
+                key=lambda item: (
+                    item[1],
+                    item[3]
+                )
+            )
+
+            selected_contract = close_evaluations[-1][0]
+
+        else:
+
+            evaluations.sort(
+                key=lambda item: (
+                    item[3],
+                    item[1]
+                )
+            )
+
+            selected_contract = evaluations[-1][0]
 
     declarer_contract = selected_contract
 
