@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.634
+# Преферанс — версия 0.635
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -3164,6 +3164,13 @@ def choose_bot_bid(
 
     hand = player_hands[player]
 
+    print(
+        "ТОРГОВЛЯ ИИ:",
+        player,
+        "| доступные заявки:",
+        available_bids
+    )
+
     if len(available_bids) == 1:
 
         return "Пас", None
@@ -3282,6 +3289,17 @@ def choose_bot_bid(
         and previous_probability >= 0.50
     )
 
+    print(
+        "ТОРГОВЛЯ ИИ:",
+        player,
+        "| previous_bid:",
+        previous_bid,
+        "| previous_probability:",
+        previous_probability,
+        "| defend_previous_bid:",
+        defend_previous_bid
+    )
+
     # --------------------------------------------------------
     # Выбираем заявку.
     #
@@ -3364,8 +3382,8 @@ def choose_bot_bid(
             # ------------------------------------------------
 
             if (
-                confidence >= 15
-                and probability >= 0.20
+                confidence >= 25
+                and probability > 0
             ):
 
                 reasonable.append(item)
@@ -3373,11 +3391,23 @@ def choose_bot_bid(
                 continue
 
             if (
-                confidence >= 25
-                and probability >= 0.20
+                confidence >= 15
+                and probability >= 0.30
             ):
 
                 reasonable.append(item)
+
+                continue
+
+    print(
+        "ТОРГОВЛЯ ИИ:",
+        player,
+        "| reasonable:",
+        [
+            item[0]
+            for item in reasonable
+        ]
+    )
 
     if not reasonable:
 
@@ -3393,6 +3423,16 @@ def choose_bot_bid(
     )
 
     selected_bid = reasonable[-1]
+
+    print(
+        "ТОРГОВЛЯ ИИ:",
+        player,
+        "| selected_bid:",
+        selected_bid[0],
+        "| probability:",
+        round(selected_bid[1] * 100, 1),
+        "%"
+    )
 
     return (
         selected_bid[0],
@@ -5027,7 +5067,10 @@ def bot_make_play():
                 )
 
         # ----------------------------------------------------
-        # Козырь не следует тратить без причины
+        # Козырь не следует тратить без причины.
+        # Но если у декларанта много козырей
+        # и нужны взятки, слабый козырь может быть
+        # полезным способом сохранить контроль масти.
         # ----------------------------------------------------
 
         if trump is not None:
@@ -5041,6 +5084,20 @@ def bot_make_play():
                 elif not wins_now:
 
                     score -= 10
+
+                    trump_count = sum(
+                        1
+                        for c in hand
+                        if c[1] == trump
+                    )
+
+                    if trump_count >= 5:
+
+                        score += 12
+
+                    elif trump_count == 4:
+
+                        score += 6
 
         # ----------------------------------------------------
         # На первом ходе нет текущей взятки.
@@ -5058,11 +5115,154 @@ def bot_make_play():
                     current_strength * 5
                 )
 
-                score += future
-
                 if trump is not None:
                     if card[1] == trump:
                         score -= 8
+
+                # ------------------------------------------------
+                # Риск выхода в боковую масть.
+                #
+                # Сильная боковая карта может быть перебита
+                # козырем противника. Мы не знаем его руку,
+                # поэтому оцениваем только неизвестные карты.
+                #
+                # Это не запрет на такой выход, а небольшой
+                # штраф за слишком опасный первый ход.
+                # ------------------------------------------------
+
+                if (
+                    trump is not None
+                    and card[1] != trump
+                ):
+
+                    rank_order = {
+                        "7": 0,
+                        "8": 1,
+                        "9": 2,
+                        "10": 3,
+                        "В": 4,
+                        "Д": 5,
+                        "К": 6,
+                        "Т": 7
+                    }
+
+                    suits = [
+                        "♠",
+                        "♣",
+                        "♦",
+                        "♥"
+                    ]
+
+                    ranks = [
+                        "7",
+                        "8",
+                        "9",
+                        "10",
+                        "В",
+                        "Д",
+                        "К",
+                        "Т"
+                    ]
+
+                    known_cards = set(
+                        hand
+                    )
+
+                    for _, played_card in played_cards:
+
+                        known_cards.add(
+                            played_card
+                        )
+
+                    known_cards.add(
+                        card
+                    )
+
+                    unknown_cards = []
+
+                    for suit_name in suits:
+
+                        for rank_name in ranks:
+
+                            unknown_card = (
+                                rank_name,
+                                suit_name
+                            )
+
+                            if unknown_card not in known_cards:
+
+                                unknown_cards.append(
+                                    unknown_card
+                                )
+
+                    trump_cards = 0
+
+                    for unknown_card in unknown_cards:
+
+                        if unknown_card[1] == trump:
+
+                            trump_cards += 1
+
+                    if len(unknown_cards) > 0:
+
+                        trump_probability = (
+                            trump_cards
+                            / len(unknown_cards)
+                        )
+
+                    else:
+
+                        trump_probability = 0
+
+                    # Старшая боковая карта особенно жалко
+                    # отдавать под козырь.
+                    if current_strength >= 7:
+
+                        score -= int(
+                            trump_probability * 18
+                        )
+
+                    elif current_strength >= 6:
+
+                        score -= int(
+                            trump_probability * 10
+                        )
+
+                    # ------------------------------------------------
+                    # Риск быть перебитым старшей картой той же масти.
+                    #
+                    # Если у неизвестных карт есть карты старше
+                    # нашей, такой выход может сразу отдать взятку.
+                    # Штраф небольшой, чтобы ИИ не боялся
+                    # разыгрывать боковые масти вообще.
+                    # ------------------------------------------------
+
+                    higher_same_suit = 0
+
+                    for unknown_card in unknown_cards:
+
+                        if (
+                            unknown_card[1] == card[1]
+                            and rank_order[
+                                unknown_card[0]
+                            ] > rank_order[
+                                card[0]
+                            ]
+                        ):
+
+                            higher_same_suit += 1
+
+                    if higher_same_suit == 1:
+
+                        score -= 4
+
+                    elif higher_same_suit == 2:
+
+                        score -= 8
+
+                    elif higher_same_suit >= 3:
+
+                        score -= 12
 
             else:
 
@@ -5098,15 +5298,36 @@ def bot_make_play():
     # и небольшой оценки будущего.
     # --------------------------------------------------------
 
+    print(
+        "ОЦЕНКИ КАРТ ИИ",
+        player,
+        "| цель:",
+        goal_state
+    )
+
     best_card = legal_cards[0]
     best_score = evaluate_card(
         best_card
+    )
+
+    print(
+        "   ",
+        best_card,
+        "->",
+        round(best_score, 1)
     )
 
     for candidate in legal_cards[1:]:
 
         candidate_score = evaluate_card(
             candidate
+        )
+
+        print(
+            "   ",
+            candidate,
+            "->",
+            round(candidate_score, 1)
         )
 
         if candidate_score > best_score:
@@ -6237,6 +6458,8 @@ def bot_make_contract():
     # --------------------------------------------------------
     # Оцениваем доступные контракты уже по настоящей
     # руке после получения прикупа и сноса.
+    #
+    # Используем и силу руки, и симуляцию розыгрыша.
     # --------------------------------------------------------
 
     evaluations = []
@@ -6248,10 +6471,20 @@ def bot_make_contract():
             contract
         )
 
+        probability, average_tricks = (
+            estimate_contract_probability(
+                hand,
+                contract,
+                120
+            )
+        )
+
         evaluations.append(
             (
                 contract,
-                confidence
+                confidence,
+                probability,
+                average_tricks
             )
         )
 
@@ -6266,27 +6499,41 @@ def bot_make_contract():
         hand
     )
 
-    for contract, confidence in evaluations:
+    for contract, confidence, probability, average_tricks in evaluations:
 
         print(
             contract,
             "| уверенность:",
-            round(confidence, 1)
+            round(confidence, 1),
+            "| успех:",
+            round(probability * 100, 1),
+            "%",
+            "| средние взятки:",
+            round(average_tricks, 2)
         )
 
     # --------------------------------------------------------
-    # Для разных уровней требуется разная сила руки.
+    # Для разных уровней требуется разная сила руки
+    # и разная вероятность выполнения контракта.
     #
-    # Чем выше контракт, тем выше должен быть
-    # запас уверенности.
+    # Чем выше контракт, тем выше должны быть
+    # оба показателя.
     # --------------------------------------------------------
 
     required_confidence = {
         6: 0,
-        7: 16,
-        8: 24,
-        9: 38,
-        10: 46
+        7: 22,
+        8: 40,
+        9: 50,
+        10: 60
+    }
+
+    required_probability = {
+        6: 0.45,
+        7: 0.30,
+        8: 0.20,
+        9: 0.12,
+        10: 0.08
     }
 
     reasonable = []
@@ -6295,41 +6542,82 @@ def bot_make_contract():
 
         contract = item[0]
         confidence = item[1]
+        probability = item[2]
 
         suit, level = get_bid_contract(
             contract
         )
 
-        target = required_confidence.get(
+        target_confidence = required_confidence.get(
             level,
             32
         )
 
-        if confidence >= target:
+        target_probability = required_probability.get(
+            level,
+            0.20
+        )
+
+        if (
+            confidence >= target_confidence
+            and probability >= target_probability
+        ):
 
             reasonable.append(item)
 
     if reasonable:
 
-        reasonable.sort(
-            key=lambda item: get_bid_value(
+        max_level = max(
+            get_bid_contract(
                 item[0]
-            )
+            )[1]
+            for item in reasonable
         )
 
-        selected_contract = reasonable[-1][0]
+        same_level = [
+            item
+            for item in reasonable
+            if get_bid_contract(
+                item[0]
+            )[1] == max_level
+        ]
+
+        same_level.sort(
+            key=lambda item: item[2]
+        )
+
+        selected_contract = same_level[-1][0]
 
     else:
 
-        # Если рука ничего достаточно уверенно
-        # не тянет, берём минимально допустимый контракт.
-        evaluations.sort(
-            key=lambda item: get_bid_value(
-                item[0]
+        # Если ни один контракт не прошёл
+        # пороги, сначала смотрим на средние
+        # взятки по симуляции.
+        #
+        # Но если разница небольшая, не поднимаемся
+        # автоматически на более высокий контракт.
+        # В таком случае преимущество получает
+        # более сильная по confidence рука.
+
+        max_average_tricks = max(
+            item[3]
+            for item in evaluations
+        )
+
+        close_evaluations = [
+            item
+            for item in evaluations
+            if item[3] >= max_average_tricks - 0.20
+        ]
+
+        close_evaluations.sort(
+            key=lambda item: (
+                item[1],
+                item[3]
             )
         )
 
-        selected_contract = evaluations[0][0]
+        selected_contract = close_evaluations[-1][0]
 
     declarer_contract = selected_contract
 
