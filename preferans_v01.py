@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.635
+# Преферанс — версия 0.636
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -3382,6 +3382,19 @@ def choose_bot_bid(
             # ------------------------------------------------
 
             if (
+                probability < 0.10
+            ):
+
+                if (
+                    confidence >= 40
+                    and probability > 0
+                ):
+
+                    reasonable.append(item)
+
+                    continue
+
+            elif (
                 confidence >= 25
                 and probability > 0
             ):
@@ -4728,6 +4741,69 @@ def bot_make_play():
                 # Взятка сейчас полезна.
                 score += 100
 
+                # ------------------------------------------------
+                # Если декларанту осталось получить почти все
+                # оставшиеся взятки, текущая взятка становится
+                # особенно важной.
+                #
+                # Например:
+                # контракт 6
+                # уже взято 3
+                # осталось 4 карты
+                # нужно ещё 3 взятки.
+                #
+                # Здесь нельзя относиться к текущей взятке
+                # так же, как в ситуации "нужна только 1 из 4".
+                # ------------------------------------------------
+
+                suit, level = get_bid_contract(
+                    declarer_contract
+                )
+
+                tricks_needed = (
+                    level
+                    - tricks_won[declarer]
+                )
+
+                cards_remaining = len(hand)
+
+                if (
+                    cards_remaining > 0
+                    and (
+                        tricks_needed
+                        / cards_remaining
+                    ) >= 0.80
+                ):
+
+                    score += 50
+
+                elif (
+                    cards_remaining > 0
+                    and (
+                        tricks_needed
+                        / cards_remaining
+                    ) >= 0.50
+                ):
+
+                    score += 25
+
+                print(
+                    "ПЛАН ВЗЯТОК:",
+                    card,
+                    "| взято:",
+                    tricks_won[declarer],
+                    "| нужно:",
+                    tricks_needed,
+                    "| карт осталось:",
+                    cards_remaining,
+                    "| дефицит:",
+                    tricks_needed - cards_remaining,
+                    "| future:",
+                    future,
+                    "| score после срочности:",
+                    score
+                )
+
                 # Но берём её по возможности
                 # минимальной картой.
                 score -= (
@@ -4773,21 +4849,48 @@ def bot_make_play():
 
                 # Если взять сейчас нельзя,
                 # смотрим, кому уйдёт взятка.
-                if simulated_winner == declarer:
 
-                    # ВИСТУ невыгодно просто отдавать
-                    # взятку разыгрывающему.
-                    score -= 55
+                if player == declarer:
 
-                elif (
-                    simulated_winner is not None
-                    and simulated_winner != player
-                ):
+                    # ------------------------------------------------
+                    # Декларанту сейчас особенно важно
+                    # не отдавать взятку сопернику.
+                    #
+                    # Если текущую взятку получает не декларант,
+                    # это прямой минус для выполнения контракта.
+                    # ------------------------------------------------
 
-                    # Другой противник получил взятку.
-                    score += 20
+                    if (
+                        simulated_winner is not None
+                        and simulated_winner != declarer
+                    ):
 
-                score += future
+                        score -= 40
+
+                    elif simulated_winner == declarer:
+
+                        # Карта всё-таки приводит к нашей взятке.
+                        score += 15
+
+                else:
+
+                    # ------------------------------------------------
+                    # Для ВИСТА оставляем прежнюю логику.
+                    # ------------------------------------------------
+
+                    if simulated_winner == declarer:
+
+                        # ВИСТУ невыгодно просто отдавать
+                        # взятку разыгрывающему.
+                        score -= 55
+
+                    elif (
+                        simulated_winner is not None
+                        and simulated_winner != player
+                    ):
+
+                        # Другой противник получил взятку.
+                        score += 20
 
                 # При невозможности взять
                 # лучше не выбрасывать сильную карту.
@@ -4833,7 +4936,6 @@ def bot_make_play():
                     score += 15
 
                 score += 60
-                score += future
 
                 score -= (
                     current_strength * 2
@@ -6625,31 +6727,48 @@ def bot_make_contract():
 
     else:
 
-        # Если ни один контракт не прошёл
-        # пороги, сначала смотрим на средние
-        # взятки по симуляции.
+        # Если ни один контракт не прошёл основные
+        # пороги, не позволяем слабой руке автоматически
+        # уйти в высокий контракт только из-за симуляции.
         #
-        # Но если разница небольшая, не поднимаемся
-        # автоматически на более высокий контракт.
-        # В таком случае преимущество получает
-        # более сильная по confidence рука.
+        # Для 6-го уровня достаточно положительной
+        # вероятности.
+        #
+        # Для 7-го и выше требуется хотя бы минимальная
+        # уверенность в самой руке.
 
-        positive_evaluations = [
-            item
-            for item in evaluations
-            if item[2] > 0
-        ]
+        fallback_evaluations = []
 
-        if positive_evaluations:
+        for item in evaluations:
+
+            contract = item[0]
+            confidence = item[1]
+            probability = item[2]
+
+            suit, level = get_bid_contract(
+                contract
+            )
+
+            if probability <= 0:
+
+                continue
+
+            if level >= 7 and confidence < 25:
+
+                continue
+
+            fallback_evaluations.append(item)
+
+        if fallback_evaluations:
 
             max_average_tricks = max(
                 item[3]
-                for item in positive_evaluations
+                for item in fallback_evaluations
             )
 
             close_evaluations = [
                 item
-                for item in positive_evaluations
+                for item in fallback_evaluations
                 if item[3] >= max_average_tricks - 0.20
             ]
 
@@ -6664,14 +6783,42 @@ def bot_make_contract():
 
         else:
 
-            evaluations.sort(
-                key=lambda item: (
-                    item[3],
-                    item[1]
-                )
-            )
+            # Если даже 7+ не имеют достаточной
+            # уверенности, выбираем только среди
+            # контрактов 6-го уровня.
 
-            selected_contract = evaluations[-1][0]
+            level_six = [
+                item
+                for item in evaluations
+                if (
+                    get_bid_contract(
+                        item[0]
+                    )[1] == 6
+                    and item[2] > 0
+                )
+            ]
+
+            if level_six:
+
+                level_six.sort(
+                    key=lambda item: (
+                        item[1],
+                        item[3]
+                    )
+                )
+
+                selected_contract = level_six[-1][0]
+
+            else:
+
+                evaluations.sort(
+                    key=lambda item: (
+                        item[3],
+                        item[1]
+                    )
+                )
+
+                selected_contract = evaluations[-1][0]
 
     declarer_contract = selected_contract
 
