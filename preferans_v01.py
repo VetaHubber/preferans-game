@@ -3990,17 +3990,20 @@ def calculate_game_result():
         {
             "tricks": tricks_won[0],
             "points": 0,
-            "mountain": 0
+            "mountain": 0,
+            "whists": 0
         },
         {
             "tricks": tricks_won[1],
             "points": 0,
-            "mountain": 0
+            "mountain": 0,
+            "whists": 0
         },
         {
             "tricks": tricks_won[2],
             "points": 0,
-            "mountain": 0
+            "mountain": 0,
+            "whists": 0
         }
     ]
 
@@ -4012,13 +4015,15 @@ def calculate_game_result():
 
         for player in range(3):
 
-            result[player]["mountain"] = (
-                tricks_won[player]
-            )
-
             if tricks_won[player] == 0:
 
                 result[player]["points"] = 1
+
+            else:
+
+                result[player]["mountain"] = (
+                    tricks_won[player]
+                )
 
         return result
 
@@ -4091,19 +4096,10 @@ def calculate_game_result():
         )
 
     # --------------------------------------------------------
-    # Результат вистующих
+    # Определяем действия защитников
     # --------------------------------------------------------
 
-    required_whist_tricks = {
-        6: 4,
-        7: 2,
-        8: 1,
-        9: 1,
-        10: 1
-    }.get(
-        level,
-        0
-    )
+    defenders = []
 
     for player in range(3):
 
@@ -4120,63 +4116,180 @@ def calculate_game_result():
             action_index
         ]
 
-        if action == "ВИСТ":
+        defenders.append(
+            (
+                player,
+                action
+            )
+        )
 
-            if (
-                tricks_won[player]
-                < required_whist_tricks
-            ):
+    # --------------------------------------------------------
+    # Определяем вистующих и пасующих
+    # --------------------------------------------------------
 
-                missed_tricks = (
-                    required_whist_tricks
-                    - tricks_won[player]
-                )
+    whist_players = [
+        player
+        for player, action in defenders
+        if action == "ВИСТ"
+    ]
 
-                result[player]["mountain"] = (
-                    missed_tricks
-                    * contract_value
-                )
+    pass_players = [
+        player
+        for player, action in defenders
+        if action == "ПАС"
+    ]
 
-        elif action == "ПАС":
+    half_whist_players = [
+        player
+        for player, action in defenders
+        if action == "ПОЛВИСТА"
+    ]
 
-            if declarer_tricks < level:
+    # --------------------------------------------------------
+    # Обязательное количество взяток для ВИСТА
+    # --------------------------------------------------------
 
-                missed_tricks = (
-                    level
-                    - declarer_tricks
-                )
+    required_whist_tricks = {
+        6: 4,
+        7: 2,
+        8: 1,
+        9: 1,
+        10: 1
+    }.get(
+        level,
+        0
+    )
 
-                result[player]["mountain"] = (
-                    missed_tricks
-                    * contract_value
-                )
+    # --------------------------------------------------------
+    # Результат ВИСТУЮЩИХ
+    # --------------------------------------------------------
 
-        elif action == "ПОЛВИСТА":
+    for player in whist_players:
 
-            required_half_tricks = {
-                6: 2,
-                7: 1
-            }.get(
-                level,
-                0
+        # Висты за фактически взятые взятки.
+
+        result[player]["whists"] = (
+            tricks_won[player]
+            * contract_value
+        )
+
+        # ----------------------------------------------------
+        # Консоляция при подсадке разыгрывающего
+        # ----------------------------------------------------
+
+        if declarer_tricks < level:
+
+            missed_tricks = (
+                level
+                - declarer_tricks
             )
 
-            if (
-                required_half_tricks > 0
-                and tricks_won[player]
-                < required_half_tricks
-            ):
+            result[player]["whists"] += (
+                missed_tricks
+                * contract_value
+            )
 
-                missed_tricks = (
-                    required_half_tricks
-                    - tricks_won[player]
-                )
+        # ----------------------------------------------------
+        # Ответственность вистующего
+        # ----------------------------------------------------
 
-                result[player]["mountain"] = (
-                    missed_tricks
-                    * contract_value
-                    // 2
-                )
+        if tricks_won[player] < required_whist_tricks:
+
+            missed_tricks = (
+                required_whist_tricks
+                - tricks_won[player]
+            )
+
+            result[player]["mountain"] = (
+                missed_tricks
+                * contract_value
+            )
+
+    # --------------------------------------------------------
+    # ПАСУЮЩИЕ
+    # --------------------------------------------------------
+
+    # При жлобском висте пасующий получает
+    # консоляцию при подсадке разыгрывающего.
+    #
+    # Это ВИСТЫ, а не ГОРКА.
+    #
+    # Собственные взятки пасующего здесь
+    # значения не имеют.
+
+    if declarer_tricks < level:
+
+        missed_tricks = (
+            level
+            - declarer_tricks
+        )
+
+        consolation = (
+            missed_tricks
+            * contract_value
+        )
+
+        for player in pass_players:
+
+            result[player]["whists"] += (
+                consolation
+            )
+
+    # --------------------------------------------------------
+    # ПОЛВИСТА
+    # --------------------------------------------------------
+
+    required_half_tricks = {
+        6: 2,
+        7: 1
+    }.get(
+        level,
+        0
+    )
+
+    for player in half_whist_players:
+
+        # ----------------------------------------------------
+        # Ответственность полу-вистующего
+        # ----------------------------------------------------
+
+        if (
+            required_half_tricks > 0
+            and tricks_won[player]
+            < required_half_tricks
+        ):
+
+            missed_tricks = (
+                required_half_tricks
+                - tricks_won[player]
+            )
+
+            result[player]["mountain"] = (
+                missed_tricks
+                * contract_value
+                // 2
+            )
+
+        # ----------------------------------------------------
+        # Консоляция при подсадке разыгрывающего
+        # ----------------------------------------------------
+
+        if declarer_tricks < level:
+
+            missed_tricks = (
+                level
+                - declarer_tricks
+            )
+
+            consolation = (
+                missed_tricks
+                * contract_value
+                // 2
+            )
+
+            result[player]["whists"] += (
+                consolation
+            )
 
     return result
 
@@ -8028,15 +8141,32 @@ def bot_make_contract():
                 positive_evaluations = [
                     item
                     for item in evaluations
-                    if item[2] > 0
+                    if (
+                        item[2] >= 0.10
+                        and item[1] >= 15
+                    )
                 ]
 
                 if positive_evaluations:
 
+                    # Если до этого места дошли, значит
+                    # ни один контракт не прошёл основные
+                    # требования.
+                    #
+                    # Поэтому не выбираем автоматически
+                    # самый высокий контракт по средним взяткам.
+                    # Сначала учитываем вероятность выполнения,
+                    # затем уверенность в руке.
+                    #
+                    # Это не даёт ситуации, когда контракт
+                    # с вероятностью 1–2% выигрывает только
+                    # потому, что у него высокий средний результат.
+
                     positive_evaluations.sort(
                         key=lambda item: (
-                            item[3],
-                            item[1]
+                            item[2],
+                            item[1],
+                            item[3]
                         )
                     )
 
