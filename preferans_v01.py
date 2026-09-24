@@ -66,6 +66,18 @@ BID_SUIT_FONT = pygame.font.SysFont(
 
 BUTTON_WIDTH = 300
 BUTTON_HEIGHT = 75
+# ------------------------------------------------------------
+# Кнопка выхода
+# ------------------------------------------------------------
+
+exit_button_rect = pygame.Rect(
+    WIDTH - 55,
+    40,
+    55,
+    55
+)
+
+exit_confirm = False
 
 # ------------------------------------------------------------
 # Размеры игровых карт
@@ -597,6 +609,72 @@ def draw_candelabra(surface, x, y, scale=1.0):
     surface.blit(
         glow,
         (x - s(75), y - s(75))
+    )
+
+# ============================================================
+# КНОПКА ВЫХОДА
+# ============================================================
+
+def draw_exit_button(surface):
+
+    mouse_pos = pygame.mouse.get_pos()
+
+    hovered = exit_button_rect.collidepoint(
+        mouse_pos
+    )
+
+    # --------------------------------------------------------
+    # Фон кнопки
+    # --------------------------------------------------------
+
+    button_color = (
+        (155, 25, 22)
+        if hovered
+        else (110, 18, 16)
+    )
+
+    pygame.draw.circle(
+        surface,
+        (55, 30, 28),
+        exit_button_rect.center,
+        29
+    )
+
+    pygame.draw.circle(
+        surface,
+        button_color,
+        exit_button_rect.center,
+        25
+    )
+
+    pygame.draw.circle(
+        surface,
+        GOLD_DARK,
+        exit_button_rect.center,
+        27,
+        width=2
+    )
+
+    # --------------------------------------------------------
+    # Красный крестик
+    # --------------------------------------------------------
+
+    cx, cy = exit_button_rect.center
+
+    pygame.draw.line(
+        surface,
+        IVORY,
+        (cx - 12, cy - 12),
+        (cx + 12, cy + 12),
+        5
+    )
+
+    pygame.draw.line(
+        surface,
+        IVORY,
+        (cx + 12, cy - 12),
+        (cx - 12, cy + 12),
+        5
     )
 
 
@@ -7190,10 +7268,20 @@ def main():
                 if event.button == 1:
 
                     # ----------------------------------------
+                    # Кнопка выхода
+                    # ----------------------------------------
+
+                    if exit_button_rect.collidepoint(
+                        event.pos
+                    ):
+
+                        running = False
+
+                    # ----------------------------------------
                     # Торговля
                     # ----------------------------------------
 
-                    if game_started and bidding_active:
+                    elif game_started and bidding_active:
 
                         for rect, bid in bid_buttons:
 
@@ -7563,6 +7651,12 @@ def main():
             HEIGHT - 135,
             0.75
         )
+
+        # ----------------------------------------------------
+        # Кнопка выхода
+        # ----------------------------------------------------
+
+        draw_exit_button(screen)
 
         # ----------------------------------------------------
         # Главное меню
