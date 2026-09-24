@@ -3649,6 +3649,13 @@ def start_talon_phase():
             declarer = player
             break
 
+    print(
+        "ОТЛАДКА ПРИКУП:",
+        "| highest_bid:", highest_bid,
+        "| player_bids:", player_bids,
+        "| declarer:", declarer
+    )
+
     if declarer is None:
         return
 
@@ -4736,6 +4743,44 @@ def bot_make_play():
 
         if goal_state == "NEED_TRICKS":
 
+            if (
+                player == declarer
+                and not trick_cards
+                and trump is not None
+                and card[1] != trump
+            ):
+
+                score -= 20
+
+            if (
+                player == declarer
+                and not trick_cards
+                and trump is not None
+            ):
+
+                suit, level = get_bid_contract(
+                    declarer_contract
+                )
+
+                tricks_needed = (
+                    level
+                    - tricks_won[declarer]
+                )
+
+                cards_remaining = len(hand)
+
+                if (
+                    cards_remaining > 0
+                    and tricks_needed >= 2
+                    and (
+                        tricks_needed
+                        / cards_remaining
+                    ) >= 0.50
+                    and card[1] == trump
+                ):
+
+                    score += 15
+
             if wins_now:
 
                 # Взятка сейчас полезна.
@@ -4760,10 +4805,20 @@ def bot_make_play():
                     declarer_contract
                 )
 
-                tricks_needed = (
-                    level
-                    - tricks_won[declarer]
-                )
+                if suit == "Мизер":
+
+                    # Для вистующего на Мизере
+                    # нет контрактной нормы уровня 6-10.
+                    # Поэтому расчёт срочности контракта
+                    # здесь не применяем.
+                    tricks_needed = 0
+
+                else:
+
+                    tricks_needed = (
+                        level
+                        - tricks_won[declarer]
+                    )
 
                 cards_remaining = len(hand)
 
@@ -4776,6 +4831,16 @@ def bot_make_play():
                 ):
 
                     score += 50
+
+                elif (
+                    cards_remaining > 0
+                    and (
+                        tricks_needed
+                        / cards_remaining
+                    ) >= 0.66
+                ):
+
+                    score += 40
 
                 elif (
                     cards_remaining > 0
@@ -4843,7 +4908,7 @@ def bot_make_play():
 
                     if stronger_trump_remaining:
 
-                        score += 8
+                        score += 20
 
             else:
 
@@ -6668,9 +6733,9 @@ def bot_make_contract():
     required_probability = {
         6: 0.45,
         7: 0.30,
-        8: 0.20,
-        9: 0.12,
-        10: 0.08
+        8: 0.40,
+        9: 0.55,
+        10: 0.65
     }
 
     reasonable = []
@@ -6753,7 +6818,19 @@ def bot_make_contract():
 
                 continue
 
-            if level >= 7 and confidence < 25:
+            if level == 10 and confidence < 60:
+
+                continue
+
+            if level == 9 and confidence < 50:
+
+                continue
+
+            if level == 8 and confidence < 40:
+
+                continue
+
+            if level == 7 and confidence < 25:
 
                 continue
 
@@ -7340,6 +7417,10 @@ def main():
                             discard_selection.clear()
 
                             if declarer_contract == "Мизер":
+
+                                whist_current_player = (
+                                    declarer + 1
+                                ) % 3
 
                                 game_phase = "whist"
 
