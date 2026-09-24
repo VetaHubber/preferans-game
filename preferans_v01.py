@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.636
+# Преферанс — версия 0.637
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -241,6 +241,7 @@ def start_bidding():
     player_passed = [False, False, False]
     highest_bid = ""
     bid_history = []
+    tricks_won = [0, 0, 0]
 
     opponent_actions = ["", ""]
 
@@ -1292,14 +1293,24 @@ def draw_player_action(surface):
         return
 
     if (
-        game_phase in ("whist", "whist_done", "play")
+        game_phase in (
+            "whist",
+            "whist_done",
+            "play",
+            "result"
+        )
         and declarer == 0
     ):
 
         text = declarer_contract
 
     elif (
-        game_phase in ("whist", "whist_done", "play")
+        game_phase in (
+            "whist",
+            "whist_done",
+            "play",
+            "result"
+        )
         and declarer is not None
         and declarer != 0
         and whist_actions[
@@ -3943,6 +3954,500 @@ def start_play_phase():
         "| контракт:",
         declarer_contract
     )
+
+def calculate_game_result():
+
+    result = [
+        {
+            "tricks": tricks_won[0],
+            "points": 0,
+            "mountain": 0
+        },
+        {
+            "tricks": tricks_won[1],
+            "points": 0,
+            "mountain": 0
+        },
+        {
+            "tricks": tricks_won[2],
+            "points": 0,
+            "mountain": 0
+        }
+    ]
+
+    # --------------------------------------------------------
+    # РАСПАСОВКА
+    # --------------------------------------------------------
+
+    if raspasovka:
+
+        for player in range(3):
+
+            result[player]["mountain"] = (
+                tricks_won[player]
+            )
+
+            if tricks_won[player] == 0:
+
+                result[player]["points"] = 1
+
+        return result
+
+    # --------------------------------------------------------
+    # Обычная игра
+    # --------------------------------------------------------
+
+    if declarer is None:
+        return result
+
+    suit, level = get_bid_contract(
+        declarer_contract
+    )
+
+    # --------------------------------------------------------
+    # МИЗЕР
+    # --------------------------------------------------------
+
+    if suit == "Мизер":
+
+        if tricks_won[declarer] == 0:
+
+            result[declarer]["points"] = 10
+
+        else:
+
+            result[declarer]["mountain"] = (
+                tricks_won[declarer] * 10
+            )
+
+        return result
+
+    # --------------------------------------------------------
+    # Стоимость обычного контракта
+    # --------------------------------------------------------
+
+    contract_value = {
+        6: 2,
+        7: 4,
+        8: 6,
+        9: 8,
+        10: 10
+    }.get(
+        level,
+        0
+    )
+
+    # --------------------------------------------------------
+    # Результат разыгрывающего
+    # --------------------------------------------------------
+
+    declarer_tricks = tricks_won[declarer]
+
+    if declarer_tricks >= level:
+
+        result[declarer]["points"] = (
+            contract_value
+        )
+
+    else:
+
+        missed_tricks = (
+            level
+            - declarer_tricks
+        )
+
+        result[declarer]["mountain"] = (
+            missed_tricks
+            * contract_value
+        )
+
+    # --------------------------------------------------------
+    # Результат вистующих
+    # --------------------------------------------------------
+
+    required_whist_tricks = {
+        6: 4,
+        7: 2,
+        8: 1,
+        9: 1,
+        10: 1
+    }.get(
+        level,
+        0
+    )
+
+    for player in range(3):
+
+        if player == declarer:
+            continue
+
+        action_index = (
+            player
+            - declarer
+            - 1
+        ) % 3
+
+        action = whist_actions[
+            action_index
+        ]
+
+        if action == "ВИСТ":
+
+            if (
+                tricks_won[player]
+                < required_whist_tricks
+            ):
+
+                missed_tricks = (
+                    required_whist_tricks
+                    - tricks_won[player]
+                )
+
+                result[player]["mountain"] = (
+                    missed_tricks
+                    * contract_value
+                )
+
+        elif action == "ПАС":
+
+            if declarer_tricks < level:
+
+                missed_tricks = (
+                    level
+                    - declarer_tricks
+                )
+
+                result[player]["mountain"] = (
+                    missed_tricks
+                    * contract_value
+                )
+
+        elif action == "ПОЛВИСТА":
+
+            required_half_tricks = {
+                6: 2,
+                7: 1
+            }.get(
+                level,
+                0
+            )
+
+            if (
+                required_half_tricks > 0
+                and tricks_won[player]
+                < required_half_tricks
+            ):
+
+                missed_tricks = (
+                    required_half_tricks
+                    - tricks_won[player]
+                )
+
+                result[player]["mountain"] = (
+                    missed_tricks
+                    * contract_value
+                    // 2
+                )
+
+    return result
+
+def draw_result_screen(surface):
+
+    result = calculate_game_result()
+
+    # --------------------------------------------------------
+    # Фон
+    # --------------------------------------------------------
+
+    pygame.draw.rect(
+        surface,
+        (43, 49, 46),
+        pygame.Rect(
+            150,
+            100,
+            WIDTH - 300,
+            HEIGHT - 200
+        ),
+        border_radius=30
+    )
+
+    pygame.draw.rect(
+        surface,
+        GOLD,
+        pygame.Rect(
+            150,
+            100,
+            WIDTH - 300,
+            HEIGHT - 200
+        ),
+        width=3,
+        border_radius=30
+    )
+
+    # --------------------------------------------------------
+    # Шрифты
+    # --------------------------------------------------------
+
+    title_font = pygame.font.SysFont(
+        "Georgia",
+        64,
+        bold=True
+    )
+
+    name_font = pygame.font.SysFont(
+        "Georgia",
+        48,
+        bold=True
+    )
+
+    label_font = pygame.font.SysFont(
+        "Georgia",
+        42,
+        bold=True
+    )
+
+    number_font = pygame.font.SysFont(
+        "Georgia",
+        76,
+        bold=True
+    )
+
+    # --------------------------------------------------------
+    # Заголовок
+    # --------------------------------------------------------
+
+    title = title_font.render(
+        "РЕЗУЛЬТАТ ИГРЫ",
+        True,
+        IVORY
+    )
+
+    title_rect = title.get_rect(
+        center=(
+            WIDTH // 2,
+            165
+        )
+    )
+
+    surface.blit(
+        title,
+        title_rect
+    )
+
+    # --------------------------------------------------------
+    # Координаты таблицы
+    # --------------------------------------------------------
+
+    label_x = 220
+
+    column_x = [
+        WIDTH // 2 - 300,
+        WIDTH // 2 - 100,
+        WIDTH // 2 + 100,
+        WIDTH // 2 + 310
+    ]
+
+    row_y = [
+        350,
+        490,
+        630
+    ]
+
+    # --------------------------------------------------------
+    # Заголовки столбцов
+    # --------------------------------------------------------
+
+    column_names = [
+        "ВЗЯТКИ",
+        "ОЧКИ",
+        "ГОРКА",
+        "ИГРА"
+    ]
+
+    for column in range(4):
+
+        text_color = (
+            RED
+            if column == 2
+            else IVORY
+        )
+
+        text = label_font.render(
+            column_names[column],
+            True,
+            text_color
+        )
+
+        text_rect = text.get_rect(
+            center=(
+                column_x[column],
+                270
+            )
+        )
+
+        surface.blit(
+            text,
+            text_rect
+        )
+
+    # --------------------------------------------------------
+    # Имена игроков слева
+    # --------------------------------------------------------
+
+    player_names = [
+        "ВЫ",
+        "СТУДЕНТ",
+        "ДОЦЕНТ"
+    ]
+
+    for player in range(3):
+
+        name = name_font.render(
+            player_names[player],
+            True,
+            IVORY
+        )
+
+        name_rect = name.get_rect(
+            center=(
+                label_x,
+                row_y[player]
+            )
+        )
+
+        surface.blit(
+            name,
+            name_rect
+        )
+
+    # --------------------------------------------------------
+    # Значения таблицы
+    # --------------------------------------------------------
+
+    for player in range(3):
+
+        # ВЗЯТКИ
+        tricks_text = number_font.render(
+            str(result[player]["tricks"]),
+            True,
+            IVORY
+        )
+
+        tricks_rect = tricks_text.get_rect(
+            center=(
+                column_x[0],
+                row_y[player]
+            )
+        )
+
+        surface.blit(
+            tricks_text,
+            tricks_rect
+        )
+
+        # ОЧКИ
+        points_text = number_font.render(
+            str(result[player]["points"]),
+            True,
+            IVORY
+        )
+
+        points_rect = points_text.get_rect(
+            center=(
+                column_x[1],
+                row_y[player]
+            )
+        )
+
+        surface.blit(
+            points_text,
+            points_rect
+        )
+
+        # ГОРКА
+        mountain_text = number_font.render(
+            str(result[player]["mountain"]),
+            True,
+            RED
+        )
+
+        mountain_rect = mountain_text.get_rect(
+            center=(
+                column_x[2],
+                row_y[player]
+            )
+        )
+
+        surface.blit(
+            mountain_text,
+            mountain_rect
+        )
+
+        # ИГРА
+
+        if player == declarer:
+
+            game_text = declarer_contract
+
+        else:
+
+            action_index = (
+                player - declarer - 1
+            ) % 3
+
+            game_text = whist_actions[action_index]
+
+        game_font = pygame.font.SysFont(
+            "DejaVu Sans",
+            42,
+            bold=True
+        )
+
+        game_surface = game_font.render(
+            game_text,
+            True,
+            IVORY
+        )
+
+        game_rect = game_surface.get_rect(
+            center=(
+                column_x[3],
+                row_y[player]
+            )
+        )
+
+        surface.blit(
+            game_surface,
+            game_rect
+        )
+
+    # --------------------------------------------------------
+    # Подсказка
+    # --------------------------------------------------------
+
+    hint_font = pygame.font.SysFont(
+        "Georgia",
+        30
+    )
+
+    hint = hint_font.render(
+        "Нажмите ПРОБЕЛ или кликните мышью для следующей раздачи",
+        True,
+        GOLD_LIGHT
+    )
+
+    hint_rect = hint.get_rect(
+        center=(
+            WIDTH // 2,
+            790
+        )
+    )
+
+    surface.blit(
+        hint,
+        hint_rect
+    )
+
 
 def determine_trick_winner():
 
@@ -6972,14 +7477,26 @@ def bot_make_contract():
 
             else:
 
-                evaluations.sort(
-                    key=lambda item: (
-                        item[3],
-                        item[1]
-                    )
-                )
+                positive_evaluations = [
+                    item
+                    for item in evaluations
+                    if item[2] > 0
+                ]
 
-                selected_contract = evaluations[-1][0]
+                if positive_evaluations:
+
+                    positive_evaluations.sort(
+                        key=lambda item: (
+                            item[3],
+                            item[1]
+                        )
+                    )
+
+                    selected_contract = positive_evaluations[-1][0]
+
+                else:
+
+                    selected_contract = "Пас"
 
     declarer_contract = selected_contract
 
@@ -7276,6 +7793,30 @@ def main():
                     ):
 
                         running = False
+
+                    # ----------------------------------------
+                    # Результат раздачи
+                    # ----------------------------------------
+                    elif (
+                        game_started
+                        and game_phase == "result"
+                    ):
+
+                        deal_cards()
+                        start_bidding()
+
+                    # ----------------------------------------
+                    # Торговля
+                    # ----------------------------------------
+                    elif game_started and bidding_active:
+
+                        for rect, bid in bid_buttons:
+
+                            if rect.collidepoint(event.pos):
+
+                                player_make_bid(bid)
+
+                                break
 
                     # ----------------------------------------
                     # Торговля
@@ -7961,6 +8502,9 @@ def main():
 
             elif game_phase == "whist_done":
             	draw_whist_done(screen)
+
+            elif game_phase == "result":
+            	draw_result_screen(screen)
 
         pygame.display.flip()
 
