@@ -3396,7 +3396,7 @@ def choose_bot_bid(
 
             elif (
                 confidence >= 25
-                and probability > 0
+                and probability >= 0.20
             ):
 
                 reasonable.append(item)
@@ -4081,10 +4081,16 @@ def bot_make_play():
             # вообще не брать взятки.
             goal_state = "AVOID_TRICKS"
 
+        elif role == "pass":
+
+            # Пасующий на Мизере также старается
+            # избегать взяток.
+            goal_state = "AVOID_TRICKS"
+
         else:
 
-            # Противники стараются
-            # отдавать взятки разыгрывающему.
+            # Вистующий / полвистующий старается
+            # брать взятки и мешать разыгрывающему.
             goal_state = "NEED_TRICKS"
 
     # --------------------------------------------------------
