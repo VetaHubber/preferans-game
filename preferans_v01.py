@@ -4,7 +4,7 @@ import threading
 import pygame
 
 # ------------------------------------------------------------
-# Преферанс — версия 0.638
+# Преферанс — версия 0.640
 # Главный экран + первая раздача на 3 игроков
 # ------------------------------------------------------------
 
@@ -8174,7 +8174,10 @@ def bot_make_contract():
 
                 else:
 
-                    selected_contract = "Пас"
+                    selected_contract = min(
+                        available_contracts,
+                        key=get_bid_value
+                    )
 
     declarer_contract = selected_contract
 
