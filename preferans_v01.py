@@ -7007,6 +7007,7 @@ def bot_make_discard():
     global discard_selection
     global whist_current_player
     global whist_actions
+    global whist_choice
 
     if game_phase != "discard":
         return
@@ -7228,13 +7229,14 @@ def bot_make_discard():
 
     if declarer_contract == "Мизер":
 
-        whist_current_player = (
-            declarer + 1
-        ) % 3
+        whist_actions = [
+            "ВИСТ",
+            "ВИСТ"
+        ]
 
-        whist_actions = ["", ""]
+        whist_choice = "ВИСТ"
 
-        game_phase = "whist"
+        start_play_phase()
 
     else:
 
@@ -8410,6 +8412,7 @@ def main():
     global game_phase
     global whist_current_player
     global whist_choice
+    global whist_actions
     global play_current_player
     global trick_lead_suit
     global trick_winner
@@ -8734,11 +8737,14 @@ def main():
 
                             if declarer_contract == "Мизер":
 
-                                whist_current_player = (
-                                    declarer + 1
-                                ) % 3
+                                whist_actions = [
+                                    "ВИСТ",
+                                    "ВИСТ"
+                                ]
 
-                                game_phase = "whist"
+                                whist_choice = "ВИСТ"
+
+                                start_play_phase()
 
                             else:
 
