@@ -2022,11 +2022,33 @@ def draw_whist_phase(surface, mouse_pos):
 
     button_width = 280
     button_height = 95
-    gap = 25
+
+    if declarer_contract in (
+        "8♠", "8♣", "8♦", "8♥", "8БК",
+        "9♠", "9♣", "9♦", "9♥", "9БК",
+        "10♠", "10♣", "10♦", "10♥", "10БК"
+    ):
+
+        gap = 35
+
+        buttons = [
+            ("ВИСТ", GREEN),
+            ("ПАС", RED)
+        ]
+
+    else:
+
+        gap = 25
+
+        buttons = [
+            ("ВИСТ", GREEN),
+            ("ПОЛВИСТА", GOLD_LIGHT),
+            ("ПАС", RED)
+        ]
 
     total_width = (
-        button_width * 3
-        + gap * 2
+        button_width * len(buttons)
+        + gap * (len(buttons) - 1)
     )
 
     start_x = (
@@ -2035,12 +2057,6 @@ def draw_whist_phase(surface, mouse_pos):
     )
 
     y = 360
-
-    buttons = [
-        ("ВИСТ", GREEN),
-        ("ПОЛВИСТА", GOLD_LIGHT),
-        ("ПАС", RED)
-    ]
 
     for index, (text, color) in enumerate(buttons):
 
