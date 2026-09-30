@@ -229,6 +229,9 @@ def start_bidding():
     global declarer_contract
     global raspasovka
     global talon_taken
+    global result_saved
+
+    result_saved = False
 
     dealer = random.randint(0, 2)
 
@@ -4000,26 +4003,95 @@ def start_play_phase():
         declarer_contract
     )
 
+# ============================================================
+# ПУЛЬКА
+# ============================================================
+
+BULLET_LENGTH = 10
+
+bullet = [
+    0,
+    0,
+    0
+]
+
+mountain = [
+    0,
+    0,
+    0
+]
+
+# ------------------------------------------------------------
+# ВИСТЫ
+#
+# whists[player][opponent]
+#
+# Например:
+#
+# whists[0][1] = висты ВЫ на СТУДЕНТА
+# whists[0][2] = висты ВЫ на ДОЦЕНТА
+#
+# Своя ячейка всегда равна 0.
+# ------------------------------------------------------------
+
+whists = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0]
+]
+
+# ------------------------------------------------------------
+# Последняя раздача
+#
+# [действие, взятки]
+# ------------------------------------------------------------
+
+last_deal_result = [
+    ["", 0],
+    ["", 0],
+    ["", 0]
+]
+
+# ------------------------------------------------------------
+# Флаг:
+#
+# результат текущей раздачи уже записан в пульку
+#
+# Это защищает от повторного начисления.
+# ------------------------------------------------------------
+
+result_saved = False
+
+
 def calculate_game_result():
 
     result = [
         {
             "tricks": tricks_won[0],
-            "points": 0,
+            "bullet": 0,
             "mountain": 0,
-            "whists": 0
+            "whists": {
+                1: 0,
+                2: 0
+            }
         },
         {
             "tricks": tricks_won[1],
-            "points": 0,
+            "bullet": 0,
             "mountain": 0,
-            "whists": 0
+            "whists": {
+                0: 0,
+                2: 0
+            }
         },
         {
             "tricks": tricks_won[2],
-            "points": 0,
+            "bullet": 0,
             "mountain": 0,
-            "whists": 0
+            "whists": {
+                0: 0,
+                1: 0
+            }
         }
     ]
 
@@ -4033,7 +4105,7 @@ def calculate_game_result():
 
             if tricks_won[player] == 0:
 
-                result[player]["points"] = 1
+                result[player]["bullet"] = 1
 
             else:
 
@@ -4062,7 +4134,7 @@ def calculate_game_result():
 
         if tricks_won[declarer] == 0:
 
-            result[declarer]["points"] = 10
+            result[declarer]["bullet"] = 10
 
         else:
 
@@ -4073,7 +4145,7 @@ def calculate_game_result():
         return result
 
     # --------------------------------------------------------
-    # Стоимость обычного контракта
+    # Стоимость контракта
     # --------------------------------------------------------
 
     contract_value = {
@@ -4095,7 +4167,7 @@ def calculate_game_result():
 
     if declarer_tricks >= level:
 
-        result[declarer]["points"] = (
+        result[declarer]["bullet"] = (
             contract_value
         )
 
@@ -4112,7 +4184,7 @@ def calculate_game_result():
         )
 
     # --------------------------------------------------------
-    # Определяем действия защитников
+    # Защитники
     # --------------------------------------------------------
 
     defenders = []
@@ -4140,7 +4212,7 @@ def calculate_game_result():
         )
 
     # --------------------------------------------------------
-    # Определяем вистующих и пасующих
+    # ВИСТУЮЩИЕ
     # --------------------------------------------------------
 
     whist_players = [
@@ -4149,11 +4221,19 @@ def calculate_game_result():
         if action == "ВИСТ"
     ]
 
+    # --------------------------------------------------------
+    # ПАСУЮЩИЕ
+    # --------------------------------------------------------
+
     pass_players = [
         player
         for player, action in defenders
         if action == "ПАС"
     ]
+
+    # --------------------------------------------------------
+    # ПОЛВИСТА
+    # --------------------------------------------------------
 
     half_whist_players = [
         player
@@ -4182,15 +4262,13 @@ def calculate_game_result():
 
     for player in whist_players:
 
-        # Висты за фактически взятые взятки.
-
-        result[player]["whists"] = (
+        current_whists = (
             tricks_won[player]
             * contract_value
         )
 
         # ----------------------------------------------------
-        # Консоляция при подсадке разыгрывающего
+        # Консоляция при подсадке
         # ----------------------------------------------------
 
         if declarer_tricks < level:
@@ -4200,10 +4278,20 @@ def calculate_game_result():
                 - declarer_tricks
             )
 
-            result[player]["whists"] += (
+            current_whists += (
                 missed_tricks
                 * contract_value
             )
+
+        # ----------------------------------------------------
+        # Висты записываются именно НА РАЗЫГРЫВАЮЩЕГО
+        #
+        # Никакого player < declarer.
+        # ----------------------------------------------------
+
+        result[player]["whists"][declarer] = (
+            current_whists
+        )
 
         # ----------------------------------------------------
         # Ответственность вистующего
@@ -4225,14 +4313,6 @@ def calculate_game_result():
     # ПАСУЮЩИЕ
     # --------------------------------------------------------
 
-    # При жлобском висте пасующий получает
-    # консоляцию при подсадке разыгрывающего.
-    #
-    # Это ВИСТЫ, а не ГОРКА.
-    #
-    # Собственные взятки пасующего здесь
-    # значения не имеют.
-
     if declarer_tricks < level:
 
         missed_tricks = (
@@ -4247,7 +4327,7 @@ def calculate_game_result():
 
         for player in pass_players:
 
-            result[player]["whists"] += (
+            result[player]["whists"][declarer] = (
                 consolation
             )
 
@@ -4264,6 +4344,16 @@ def calculate_game_result():
     )
 
     for player in half_whist_players:
+
+        # ----------------------------------------------------
+        # Висты за собственные взятки
+        # ----------------------------------------------------
+
+        current_whists = (
+            tricks_won[player]
+            * contract_value
+            // 2
+        )
 
         # ----------------------------------------------------
         # Ответственность полу-вистующего
@@ -4287,7 +4377,7 @@ def calculate_game_result():
             )
 
         # ----------------------------------------------------
-        # Консоляция при подсадке разыгрывающего
+        # Консоляция
         # ----------------------------------------------------
 
         if declarer_tricks < level:
@@ -4303,173 +4393,292 @@ def calculate_game_result():
                 // 2
             )
 
-            result[player]["whists"] += (
+            current_whists += (
                 consolation
             )
 
+        # ----------------------------------------------------
+        # Висты записываются именно НА РАЗЫГРЫВАЮЩЕГО
+        # ----------------------------------------------------
+
+        result[player]["whists"][declarer] = (
+            current_whists
+        )
+
     return result
+
+
+def save_game_result():
+
+    global result_saved
+    global last_deal_result
+
+    # --------------------------------------------------------
+    # Уже записали эту раздачу
+    # --------------------------------------------------------
+
+    if result_saved:
+
+        return
+
+    result = calculate_game_result()
+
+    # --------------------------------------------------------
+    # Запоминаем последнюю заявку / действие
+    # и количество взяток
+    # --------------------------------------------------------
+
+    for player in range(3):
+
+        last_deal_result[player] = [
+            "",
+            tricks_won[player]
+        ]
+
+    # --------------------------------------------------------
+    # Разыгрывающий
+    # --------------------------------------------------------
+
+    if declarer is not None:
+
+        last_deal_result[declarer][0] = (
+            declarer_contract
+        )
+
+    # --------------------------------------------------------
+    # Висты
+    # --------------------------------------------------------
+
+    if declarer is not None:
+
+        first_whist_player = (
+            declarer + 1
+        ) % 3
+
+        second_whist_player = (
+            declarer + 2
+        ) % 3
+
+        if len(whist_actions) > 0:
+
+            last_deal_result[
+                first_whist_player
+            ][0] = whist_actions[0]
+
+        if len(whist_actions) > 1:
+
+            last_deal_result[
+                second_whist_player
+            ][0] = whist_actions[1]
+
+    # --------------------------------------------------------
+    # РАСПАСОВКА
+    # --------------------------------------------------------
+
+    if raspasovka:
+
+        for player in range(3):
+
+            last_deal_result[player][0] = (
+                "РАСПАСОВКА"
+            )
+
+    # --------------------------------------------------------
+    # Записываем ПУЛЮ и ГОРУ
+    # --------------------------------------------------------
+
+    for player in range(3):
+
+        bullet[player] += (
+            result[player]["bullet"]
+        )
+
+        mountain[player] += (
+            result[player]["mountain"]
+        )
+
+        # ----------------------------------------------------
+        # Записываем ВИСТЫ
+        # ----------------------------------------------------
+
+        for opponent in range(3):
+
+            if opponent == player:
+                continue
+
+            whists[player][opponent] += (
+                result[player]["whists"].get(
+                    opponent,
+                    0
+                )
+            )
+
+    # --------------------------------------------------------
+    # Раздача сохранена
+    # --------------------------------------------------------
+
+    result_saved = True
+
 
 def draw_result_screen(surface):
 
-    result = calculate_game_result()
+    # --------------------------------------------------------
+    # Сохраняем результат текущей раздачи
+    # --------------------------------------------------------
+
+    save_game_result()
 
     # --------------------------------------------------------
     # Фон
     # --------------------------------------------------------
 
+    surface.fill(
+        (38, 42, 39)
+    )
+
+    # --------------------------------------------------------
+    # Лист
+    # --------------------------------------------------------
+
+    sheet = pygame.Rect(
+        70,
+        40,
+        WIDTH - 140,
+        HEIGHT - 80
+    )
+
     pygame.draw.rect(
         surface,
-        (43, 49, 46),
-        pygame.Rect(
-            150,
-            100,
-            WIDTH - 300,
-            HEIGHT - 200
-        ),
-        border_radius=30
+        (235, 229, 207),
+        sheet,
+        border_radius=8
     )
 
     pygame.draw.rect(
         surface,
         GOLD,
-        pygame.Rect(
-            150,
-            100,
-            WIDTH - 300,
-            HEIGHT - 200
-        ),
-        width=3,
-        border_radius=30
+        sheet,
+        width=4,
+        border_radius=8
     )
 
     # --------------------------------------------------------
     # Шрифты
     # --------------------------------------------------------
 
-    title_font = pygame.font.SysFont(
-        "Georgia",
-        64,
-        bold=True
-    )
-
     name_font = pygame.font.SysFont(
         "Georgia",
-        48,
+        44,
         bold=True
     )
 
     label_font = pygame.font.SysFont(
         "Georgia",
-        42,
+        30,
         bold=True
     )
 
-    number_font = pygame.font.SysFont(
+    bullet_font = pygame.font.SysFont(
         "Georgia",
-        76,
+        110,
+        bold=True
+    )
+
+    mountain_font = pygame.font.SysFont(
+        "Georgia",
+        82,
+        bold=True
+    )
+
+    whist_font = pygame.font.SysFont(
+        "Georgia",
+        58,
+        bold=True
+    )
+
+    opponent_font = pygame.font.SysFont(
+        "Georgia",
+        22,
         bold=True
     )
 
     # --------------------------------------------------------
-    # Заголовок
+    # Три колонки
     # --------------------------------------------------------
-
-    title = title_font.render(
-        "РЕЗУЛЬТАТ",
-        True,
-        IVORY
-    )
-
-    title_rect = title.get_rect(
-        center=(
-            WIDTH // 2,
-            165
-        )
-    )
-
-    surface.blit(
-        title,
-        title_rect
-    )
-
-    # --------------------------------------------------------
-    # Координаты таблицы
-    # --------------------------------------------------------
-
-    label_x = 220
 
     column_x = [
-        WIDTH // 2 - 300,
-        WIDTH // 2 - 100,
-        WIDTH // 2 + 100,
-        WIDTH // 2 + 310
+        WIDTH // 6,
+        WIDTH // 2,
+        WIDTH * 5 // 6
     ]
-
-    row_y = [
-        350,
-        490,
-        630
-    ]
-
-    # --------------------------------------------------------
-    # Заголовки столбцов
-    # --------------------------------------------------------
-
-    column_names = [
-        "ВЗЯТКИ",
-        "ОЧКИ",
-        "ГОРКА",
-        "ИГРА"
-    ]
-
-    for column in range(4):
-
-        text_color = (
-            RED
-            if column == 2
-            else IVORY
-        )
-
-        text = label_font.render(
-            column_names[column],
-            True,
-            text_color
-        )
-
-        text_rect = text.get_rect(
-            center=(
-                column_x[column],
-                270
-            )
-        )
-
-        surface.blit(
-            text,
-            text_rect
-        )
-
-    # --------------------------------------------------------
-    # Имена игроков слева
-    # --------------------------------------------------------
 
     player_names = [
-        "ВЫ",
         "СТУДЕНТ",
+        "ВЫ",
         "ДОЦЕНТ"
     ]
 
-    for player in range(3):
+    players = [
+        1,
+        0,
+        2
+    ]
+
+    # --------------------------------------------------------
+    # Вертикальные разделители
+    # --------------------------------------------------------
+
+    pygame.draw.line(
+        surface,
+        (150, 140, 115),
+        (
+            WIDTH // 3,
+            100
+        ),
+        (
+            WIDTH // 3,
+            815
+        ),
+        2
+    )
+
+    pygame.draw.line(
+        surface,
+        (150, 140, 115),
+        (
+            WIDTH * 2 // 3,
+            100
+        ),
+        (
+            WIDTH * 2 // 3,
+            815
+        ),
+        2
+    )
+
+    # --------------------------------------------------------
+    # Рисуем три колонки
+    # --------------------------------------------------------
+
+    for column in range(3):
+
+        player = players[column]
+        center_x = column_x[column]
+
+        # ----------------------------------------------------
+        # ИМЯ
+        # ----------------------------------------------------
 
         name = name_font.render(
-            player_names[player],
+            player_names[column],
             True,
-            IVORY
+            (45, 43, 37)
         )
 
         name_rect = name.get_rect(
             center=(
-                label_x,
-                row_y[player]
+                center_x,
+                105
             )
         )
 
@@ -4478,61 +4687,78 @@ def draw_result_screen(surface):
             name_rect
         )
 
-    # --------------------------------------------------------
-    # Значения таблицы
-    # --------------------------------------------------------
+        # ----------------------------------------------------
+        # ПУЛЯ
+        # ----------------------------------------------------
 
-    for player in range(3):
-
-        # ВЗЯТКИ
-        tricks_text = number_font.render(
-            str(result[player]["tricks"]),
+        label = label_font.render(
+            "ПУЛЯ",
             True,
-            IVORY
+            (70, 65, 52)
         )
 
-        tricks_rect = tricks_text.get_rect(
+        label_rect = label.get_rect(
             center=(
-                column_x[0],
-                row_y[player]
+                center_x,
+                180
             )
         )
 
         surface.blit(
-            tricks_text,
-            tricks_rect
+            label,
+            label_rect
         )
 
-        # ОЧКИ
-        points_text = number_font.render(
-            str(result[player]["points"]),
+        bullet_text = bullet_font.render(
+            str(bullet[player]),
             True,
-            IVORY
+            (45, 43, 37)
         )
 
-        points_rect = points_text.get_rect(
+        bullet_rect = bullet_text.get_rect(
             center=(
-                column_x[1],
-                row_y[player]
+                center_x,
+                250
             )
         )
 
         surface.blit(
-            points_text,
-            points_rect
+            bullet_text,
+            bullet_rect
         )
 
+        # ----------------------------------------------------
         # ГОРКА
-        mountain_text = number_font.render(
-            str(result[player]["mountain"]),
+        # ----------------------------------------------------
+
+        label = label_font.render(
+            "ГОРА",
+            True,
+            RED
+        )
+
+        label_rect = label.get_rect(
+            center=(
+                center_x,
+                380
+            )
+        )
+
+        surface.blit(
+            label,
+            label_rect
+        )
+
+        mountain_text = mountain_font.render(
+            "-" + str(mountain[player]),
             True,
             RED
         )
 
         mountain_rect = mountain_text.get_rect(
             center=(
-                column_x[2],
-                row_y[player]
+                center_x,
+                460
             )
         )
 
@@ -4541,47 +4767,233 @@ def draw_result_screen(surface):
             mountain_rect
         )
 
-        # ИГРА
+        # ----------------------------------------------------
+        # ВИСТЫ
+        # ----------------------------------------------------
 
-        if raspasovka:
-
-            game_text = "РАСПАС"
-
-        elif player == declarer:
-
-            game_text = declarer_contract
-
-        else:
-
-            action_index = (
-                player - declarer - 1
-            ) % 3
-
-            game_text = whist_actions[action_index]
-
-        game_font = pygame.font.SysFont(
-            "DejaVu Sans",
-            42,
-            bold=True
-        )
-
-        game_surface = game_font.render(
-            game_text,
+        label = label_font.render(
+            "ВИСТЫ",
             True,
-            IVORY
+            (70, 65, 52)
         )
 
-        game_rect = game_surface.get_rect(
+        label_rect = label.get_rect(
             center=(
-                column_x[3],
-                row_y[player]
+                center_x,
+                555
             )
         )
 
         surface.blit(
-            game_surface,
-            game_rect
+            label,
+            label_rect
         )
+
+        # ----------------------------------------------------
+        # Два соперника
+        # ----------------------------------------------------
+
+        opponents = [
+            opponent
+            for opponent in range(3)
+            if opponent != player
+        ]
+
+        whist_x = [
+            center_x - 70,
+            center_x + 70
+        ]
+
+        for index, opponent in enumerate(opponents):
+
+            opponent_name = opponent_font.render(
+                player_names[
+                    players.index(opponent)
+                ],
+                True,
+                (90, 82, 65)
+            )
+
+            opponent_rect = opponent_name.get_rect(
+                center=(
+                    whist_x[index],
+                    615
+                )
+            )
+
+            surface.blit(
+                opponent_name,
+                opponent_rect
+            )
+
+            whist_value = whist_font.render(
+                str(
+                    whists[player][opponent]
+                ),
+                True,
+                (45, 43, 37)
+            )
+
+            whist_rect = whist_value.get_rect(
+                center=(
+                    whist_x[index],
+                    690
+                )
+            )
+
+            surface.blit(
+                whist_value,
+                whist_rect
+            )
+
+        # ----------------------------------------------------
+        # Нижняя линия колонки
+        # ----------------------------------------------------
+
+        pygame.draw.line(
+            surface,
+            (150, 140, 115),
+            (
+                center_x - 125,
+                760
+            ),
+            (
+                center_x + 125,
+                760
+            ),
+            2
+        )
+
+        # ----------------------------------------------------
+        # Последняя заявка и взятки
+        # ----------------------------------------------------
+
+        last_result_font = pygame.font.SysFont(
+            "DejaVu Sans",
+            40,
+            bold=True
+        )
+
+        last_result = last_deal_result[player]
+
+        action = last_result[0]
+        tricks = last_result[1]
+
+        # ----------------------------------------------------
+        # Определяем цвет масти
+        # ----------------------------------------------------
+
+        if "♥" in action or "♦" in action:
+
+            action_color = RED
+
+        else:
+
+            action_color = (45, 43, 37)
+
+        # ----------------------------------------------------
+        # Если это заявка с мастью
+        # ----------------------------------------------------
+
+        suit = ""
+
+        for symbol in (
+            "♠",
+            "♣",
+            "♦",
+            "♥"
+        ):
+
+            if symbol in action:
+
+                suit = symbol
+                break
+
+        if suit:
+
+            contract = action.replace(
+                suit,
+                ""
+            )
+
+            contract_text = last_result_font.render(
+                contract,
+                True,
+                (45, 43, 37)
+            )
+
+            suit_text = last_result_font.render(
+                suit,
+                True,
+                action_color
+            )
+
+            tricks_text = last_result_font.render(
+                f" — {tricks}",
+                True,
+                (45, 43, 37)
+            )
+
+            total_width = (
+                contract_text.get_width()
+                + suit_text.get_width()
+                + tricks_text.get_width()
+            )
+
+            x = (
+                center_x
+                - total_width // 2
+            )
+
+            y = 780
+
+            surface.blit(
+                contract_text,
+                (
+                    x,
+                    y
+                )
+            )
+
+            x += contract_text.get_width()
+
+            surface.blit(
+                suit_text,
+                (
+                    x,
+                    y
+                )
+            )
+
+            x += suit_text.get_width()
+
+            surface.blit(
+                tricks_text,
+                (
+                    x,
+                    y
+                )
+            )
+
+        else:
+
+            last_result_text = last_result_font.render(
+                f"{action} — {tricks}",
+                True,
+                (45, 43, 37)
+            )
+
+            last_result_rect = last_result_text.get_rect(
+                center=(
+                    center_x,
+                    795
+                )
+            )
+
+            surface.blit(
+                last_result_text,
+                last_result_rect
+            )
 
     # --------------------------------------------------------
     # Подсказка
@@ -4589,11 +5001,11 @@ def draw_result_screen(surface):
 
     hint_font = pygame.font.SysFont(
         "Georgia",
-        30
+        24
     )
 
     hint = hint_font.render(
-        "Нажмите ПРОБЕЛ или кликните мышью для следующей раздачи",
+        "ПРОБЕЛ / КЛИК — следующая раздача",
         True,
         GOLD_LIGHT
     )
@@ -4601,7 +5013,7 @@ def draw_result_screen(surface):
     hint_rect = hint.get_rect(
         center=(
             WIDTH // 2,
-            790
+            850
         )
     )
 
@@ -8369,9 +8781,15 @@ def bot_make_whist():
             action = "ПАС"
 
         # ----------------------------------------------------
-        # Полвиста.
-        # Если первый вистующий спасовал,
-        # второй может выбрать полвиста для 6 или 7.
+        # Решения вистующих.
+        #
+        # Если первый сказал ПАС,
+        # второй может взять ПОЛВИСТА на 6 или 7.
+        #
+        # Если первый сказал ПОЛВИСТА,
+        # а второй говорит ВИСТ,
+        # полный ВИСТ перебивает ПОЛВИСТА.
+        # Первый становится ПАС.
         # ----------------------------------------------------
 
         first_action = whist_actions[0]
@@ -8383,6 +8801,13 @@ def bot_make_whist():
         ):
 
             action = "ПОЛВИСТА"
+
+        elif (
+            first_action == "ПОЛВИСТА"
+            and action == "ВИСТ"
+        ):
+
+            whist_actions[0] = "ПАС"
 
     action_index = (
         whist_current_player
@@ -8400,6 +8825,30 @@ def bot_make_whist():
     )
 
     whist_actions[action_index] = action
+
+    # --------------------------------------------------------
+    # Если первый вистующий сказал ВИСТ,
+    # второй автоматически получает ПАС.
+    # Никакого окна выбора для него не показываем.
+    # --------------------------------------------------------
+
+    if (
+        action_index == 0
+        and action == "ВИСТ"
+    ):
+
+        whist_actions[1] = "ПАС"
+
+        whist_choice = "ПАС"
+
+        print(
+            "ВИСТ: первый сказал ВИСТ | "
+            "второму автоматически ПАС"
+        )
+
+        start_play_phase()
+
+        return
 
     whist_choice = action
 
